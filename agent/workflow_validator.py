@@ -237,7 +237,7 @@ def _validate_node(node: Any, index: int) -> None:
             )
     elif node_type == "construct_content":
         _validate_construct_content(node)
-    elif node_type == "content_map":
+    elif node_type == "construct_map_content":
         mappings = node_argument(node, "mappings")
         if not isinstance(mappings, list) or not mappings or any(
             not isinstance(item, dict)
@@ -248,11 +248,11 @@ def _validate_node(node: Any, index: int) -> None:
             for item in mappings
         ):
             raise WorkflowValidationError(
-                "content_map mappings must contain non-empty string keys and string values"
+                "construct_map_content mappings must contain non-empty string keys and string values"
             )
         keys = [item["key"] for item in mappings]
         if len(keys) != len(set(keys)):
-            raise WorkflowValidationError("content_map mappings contains duplicate keys")
+            raise WorkflowValidationError("construct_map_content mappings contains duplicate keys")
     elif node_type == "deserialize_json":
         outputs = node_argument(node, "outputs")
         if not isinstance(outputs, list) or not outputs or any(
@@ -645,13 +645,19 @@ def _validate_data_connection(
 
     source_type = source_node["type"]
     target_type = target_node["type"]
-    if target_type == "content_map" and connection_type != "content":
+    if target_type == "map_content_get":
+        expected_type = "map-content" if to_port == "map-in" else "content"
+        if to_port not in {"map-in", "key-in"} or connection_type != expected_type:
+            raise WorkflowValidationError(
+                f"map_content_get {to_port} requires {expected_type} data: connection {connection_index}"
+            )
+    if source_type == "construct_map_content" and (from_port != "map-out" or connection_type != "map-content"):
         raise WorkflowValidationError(
-            f"content_map content-in requires content data: connection {connection_index}"
+            f"construct_map_content map-out requires map-content data: connection {connection_index}"
         )
-    if source_type == "content_map" and connection_type != "content":
+    if source_type == "map_content_get" and (from_port != "content-out" or connection_type != "content"):
         raise WorkflowValidationError(
-            f"content_map content-out requires content data: connection {connection_index}"
+            f"map_content_get content-out requires content data: connection {connection_index}"
         )
     if target_type == "construct_message" and connection_type != "content":
         raise WorkflowValidationError(

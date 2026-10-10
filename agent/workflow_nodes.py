@@ -17,6 +17,13 @@ WORKFLOW_END = -1
 logger = logging.getLogger("aagent.workflow")
 
 
+def _is_map_content(value: Any) -> bool:
+    return isinstance(value, dict) and all(
+        isinstance(key, str) and bool(key) and isinstance(item, str)
+        for key, item in value.items()
+    )
+
+
 def read_workflow_input(node: dict[str, Any], port_id: str) -> tuple[bool, Any]:
     input_slot = node.get("data_inputs", {}).get(port_id)
     if not isinstance(input_slot, list) or len(input_slot) != 3:
@@ -34,7 +41,7 @@ def propagate_workflow_output(
                 f"workflow target input is not connected: node {target_id}, "
                 f"port {target_port}"
             )
-        target_slot[2] = value
+        target_slot[2] = value.copy() if isinstance(value, dict) else value
 
 
 def next_successor(node: dict[str, Any], key: str = "next") -> int:
@@ -167,20 +174,31 @@ def workflow_construct_content(current_id: int, workflow_map: WorkflowMap) -> in
     return next_successor(node)
 
 
-def workflow_content_map(current_id: int, workflow_map: WorkflowMap) -> int:
+def workflow_construct_map_content(current_id: int, workflow_map: WorkflowMap) -> int:
     node = workflow_map[current_id]
-    has_content, content = read_workflow_input(node, "content-in")
-    if not has_content:
-        raise ValueError(f"content_map input is missing: node {node.get('id')}")
-    if not isinstance(content, str):
-        raise ValueError(f"content_map input must be content: node {node.get('id')}")
-    mappings = {
-        item["key"]: item["value"]
-        for item in node_argument(node, "mappings", [])
-    }
-    if content not in mappings:
-        raise ValueError(f"content_map key is not mapped: node {node.get('id')}")
-    propagate_workflow_output(workflow_map, node, "content-out", mappings[content])
+    mappings = {item["key"]: item["value"] for item in node_argument(node, "mappings", [])}
+    propagate_workflow_output(workflow_map, node, "map-out", mappings)
+    return next_successor(node)
+
+
+def workflow_map_content_get(current_id: int, workflow_map: WorkflowMap) -> int:
+    node = workflow_map[current_id]
+    has_mapping, mapping = read_workflow_input(node, "map-in")
+    has_key, key = read_workflow_input(node, "key-in")
+    if not has_mapping:
+        raise ValueError(f"map_content_get Map input is missing: node {node.get('id')}")
+    if not isinstance(mapping, dict) or any(
+        not isinstance(map_key, str) or not map_key or not isinstance(value, str)
+        for map_key, value in mapping.items()
+    ):
+        raise ValueError(f"map_content_get input must be map-content: node {node.get('id')}")
+    if not has_key:
+        raise ValueError(f"map_content_get key input is missing: node {node.get('id')}")
+    if not isinstance(key, str):
+        raise ValueError(f"map_content_get key input must be content: node {node.get('id')}")
+    if key not in mapping:
+        raise ValueError(f"map_content_get key is not mapped: node {node.get('id')}")
+    propagate_workflow_output(workflow_map, node, "content-out", mapping[key])
     return next_successor(node)
 
 
@@ -236,6 +254,8 @@ def _deserialize_json_value(value: Any, value_type: str) -> Any:
         return value
     if value_type == "list-event" and isinstance(value, list) and all(_is_event(item) for item in value):
         return value
+    if value_type == "map-content" and _is_map_content(value):
+        return dict(value)
     raise ValueError(f"value does not match declared type {value_type}")
 
 
@@ -392,13 +412,18 @@ def workflow_remote_sync_tool(current_id: int, workflow_map: WorkflowMap) -> int
     result = _call_remote_node(node, "wait", "TOOL_CLIENT_DEFAULT_WAIT_MS", "10000")
     outputs = node_argument(node, "outputs", [])
     if len(outputs) == 1 and outputs[0]["name"] == "result":
+        if outputs[0]["type"] == "map-content" and not _is_map_content(result):
+            raise ValueError("remote sync tool result must match map-content")
         propagate_workflow_output(workflow_map, node, "result", result)
     elif isinstance(result, dict):
         missing = [output["name"] for output in outputs if output["name"] not in result]
         if missing:
             raise ValueError(f"remote sync tool result is missing outputs: {', '.join(missing)}")
         for output in outputs:
-            propagate_workflow_output(workflow_map, node, output["name"], result[output["name"]])
+            value = result[output["name"]]
+            if output["type"] == "map-content" and not _is_map_content(value):
+                raise ValueError(f"remote sync tool output {output['name']} must match map-content")
+            propagate_workflow_output(workflow_map, node, output["name"], value)
     elif outputs:
         raise ValueError("remote sync tool result must be an object for named outputs")
     return next_successor(node)
@@ -555,7 +580,8 @@ nodes_map: dict[str, NodeHandler] = {
     "router": workflow_router,
     "construct_message": workflow_construct_message,
     "construct_content": workflow_construct_content,
-    "content_map": workflow_content_map,
+    "construct_map_content": workflow_construct_map_content,
+    "map_content_get": workflow_map_content_get,
     "split_event": workflow_split_event,
     "deserialize_json": workflow_deserialize_json,
     "construct_list": workflow_construct_list,

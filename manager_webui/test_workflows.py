@@ -26,7 +26,7 @@ class WorkflowConnectionFilterTest(unittest.TestCase):
 
         self.assertEqual(filtered, connections)
 
-    def test_preserves_content_map_connections(self):
+    def test_preserves_map_content_connections(self):
         nodes = [
             {
                 "id": "input",
@@ -37,9 +37,10 @@ class WorkflowConnectionFilterTest(unittest.TestCase):
             },
             {
                 "id": "map",
-                "type": "content_map",
+                "type": "construct_map_content",
                 "arguments": {"mappings": [{"key": "a", "value": "b"}]},
             },
+            {"id": "get", "type": "map_content_get"},
             {
                 "id": "output",
                 "type": "output",
@@ -49,8 +50,9 @@ class WorkflowConnectionFilterTest(unittest.TestCase):
             },
         ]
         connections = [
-            {"id": "input-map", "fromId": "input", "fromPortId": "workflow:value", "toId": "map", "toPortId": "content-in", "type": "content"},
-            {"id": "map-output", "fromId": "map", "fromPortId": "content-out", "toId": "output", "toPortId": "workflow:result", "type": "content"},
+            {"id": "map-get", "fromId": "map", "fromPortId": "map-out", "toId": "get", "toPortId": "map-in", "type": "map-content"},
+            {"id": "input-key", "fromId": "input", "fromPortId": "workflow:value", "toId": "get", "toPortId": "key-in", "type": "content"},
+            {"id": "get-output", "fromId": "get", "fromPortId": "content-out", "toId": "output", "toPortId": "workflow:result", "type": "content"},
         ]
 
         _, filtered = filter_invalid_connections(
@@ -253,7 +255,7 @@ class WorkflowConnectionFilterTest(unittest.TestCase):
         self.assertEqual(connections, [connection])
 
     def test_preserves_context_connections_for_matching_value_type(self):
-        for value_type in ("content", "message", "event", "list-content", "list-message", "list-event"):
+        for value_type in ("content", "message", "event", "map-content", "list-content", "list-message", "list-event"):
             with self.subTest(value_type=value_type):
                 nodes = [
                     {

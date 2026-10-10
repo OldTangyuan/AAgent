@@ -30,6 +30,19 @@ class WorkflowContextRepositoryTest(unittest.TestCase):
         pipeline.execute.assert_called_once_with()
 
     @patch("workflow_context_repository.get_connection")
+    def test_map_content_is_validated_and_stored(self, get_connection):
+        pipeline = MagicMock()
+        get_connection.return_value.pipeline.return_value = pipeline
+        with patch("workflow_context_repository._ttl_seconds", return_value=60):
+            create_context("invocation-1", "map-content", {"done": "finished"})
+        mapping = pipeline.hset.call_args.kwargs["mapping"]
+        self.assertEqual(mapping["value_type"], "map-content")
+        self.assertEqual(json.loads(mapping["value"]), {"done": "finished"})
+        for invalid in [{"": "empty"}, {"valid": 1}]:
+            with self.subTest(invalid=invalid), self.assertRaises(WorkflowContextError):
+                create_context("invocation-1", "map-content", invalid)
+
+    @patch("workflow_context_repository.get_connection")
     def test_read_rejects_other_workflow_scope(self, get_connection):
         pipeline = MagicMock()
         pipeline.__enter__.return_value = pipeline

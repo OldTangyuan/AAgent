@@ -12,6 +12,7 @@ DATA_CONNECTION_TYPES = {
     "list-content",
     "list-message",
     "list-event",
+    "map-content",
 }
 SUPPORTED_NODE_TYPES = {
     "input",
@@ -19,7 +20,8 @@ SUPPORTED_NODE_TYPES = {
     "router",
     "construct_message",
     "construct_content",
-    "content_map",
+    "construct_map_content",
+    "map_content_get",
     "split_event",
     "deserialize_json",
     "construct_list",
@@ -52,7 +54,7 @@ NODE_ARGUMENT_FIELDS_BY_TYPE = {
     "router": {"branches"},
     "construct_message": {"role", "role_source"},
     "construct_content": {"append_items"},
-    "content_map": {"mappings"},
+    "construct_map_content": {"mappings"},
     "split_event": set(),
     "deserialize_json": {"outputs"},
     "construct_list": {"item_type", "initial_value_count"},
@@ -170,8 +172,10 @@ def data_ports_for_node(
         return inputs, {"message-out"}
     if node_type == "construct_content":
         return declared_inputs, {"content-out"}
-    if node_type == "content_map":
-        return {"content-in"}, {"content-out"}
+    if node_type == "construct_map_content":
+        return declared_inputs, {"map-out"}
+    if node_type == "map_content_get":
+        return declared_inputs | {"map-in", "key-in"}, {"content-out"}
     if node_type == "split_event":
         return declared_inputs | {"event-in"}, {"type-out", "payload-out"}
     if node_type == "deserialize_json":
@@ -298,11 +302,15 @@ def is_valid_connection(
             to_port != "content-in" or connection_type != "content"
         ):
             return False
-        if target_node["type"] == "content_map" and (
-            to_port != "content-in" or connection_type != "content"
+        if target_node["type"] == "map_content_get":
+            expected_type = "map-content" if to_port == "map-in" else "content"
+            if to_port not in {"map-in", "key-in"} or connection_type != expected_type:
+                return False
+        if source_node["type"] == "construct_map_content" and (
+            from_port != "map-out" or connection_type != "map-content"
         ):
             return False
-        if source_node["type"] == "content_map" and (
+        if source_node["type"] == "map_content_get" and (
             from_port != "content-out" or connection_type != "content"
         ):
             return False

@@ -5,7 +5,8 @@ from workflow_contract import is_valid_connection
 from workflow_parser import parse_workflow
 from workflow_nodes import (
     run_workflow_map,
-    workflow_content_map,
+    workflow_construct_map_content,
+    workflow_map_content_get,
     workflow_construct_list,
     workflow_construct_message,
     workflow_deserialize_json,
@@ -275,10 +276,14 @@ class CallableWorkflowNodeTest(unittest.TestCase):
                     "type": "foreach",
                     "arguments": {"item_type": "event"},
                 },
+                {"id": "output", "type": "output", "workflowPorts": []},
             ],
             "connections": [
                 {"fromId": "input", "fromPortId": "control-out", "toId": "history", "toPortId": "control-in", "type": "control"},
+                {"fromId": "history", "fromPortId": "control-out", "toId": "foreach", "toPortId": "control-in", "type": "control"},
                 {"fromId": "history", "fromPortId": "events", "toId": "foreach", "toPortId": "list-in", "type": "list-event"},
+                {"fromId": "foreach", "fromPortId": "loop-out", "toId": "foreach", "toPortId": "loop-in", "type": "control"},
+                {"fromId": "foreach", "fromPortId": "control-out", "toId": "output", "toPortId": "control-in", "type": "control"},
             ],
         }
 
@@ -503,27 +508,31 @@ class CallableWorkflowNodeTest(unittest.TestCase):
             parsed[1]["data_inputs"]["workflow:query"], [None, None, None]
         )
 
-    def test_parser_filters_connection_invalidated_by_metadata(self):
+    def test_parser_filters_undeclared_workflow_ports(self):
         workflow = callable_workflow_fixture()
         workflow["connections"].append({
             "id": "stale",
             "fromId": "input",
             "fromPortId": "workflow:stale",
             "toId": "call-summary",
-            "toPortId": "workflow:query",
+            "toPortId": "workflow:stale",
             "type": "content",
         })
 
         parsed = parse_workflow(workflow)
 
-        self.assertNotIn([1, "workflow:query"], parsed[0]["data_outputs"]["workflow:query"])
+        self.assertEqual(parsed[0]["data_outputs"]["workflow:query"], [[1, "workflow:query"]])
+        self.assertNotIn("workflow:stale", parsed[0]["data_outputs"])
+        self.assertNotIn("workflow:stale", parsed[1]["data_inputs"])
 
     def test_validator_filters_legacy_output_content_input(self):
         workflow = callable_workflow_fixture()
         workflow["connections"][3]["toPortId"] = "content-in"
 
         validate_workflow(workflow)
-        self.assertIsNone(parse_workflow(workflow)[1]["data_inputs"]["workflow:result"])
+        parsed = parse_workflow(workflow)
+        self.assertEqual(parsed[1]["data_outputs"]["workflow:result"], [])
+        self.assertEqual(parsed[2]["data_inputs"]["workflow:result"], [None, None, None])
 
     def test_validator_filters_legacy_input_content_output(self):
         workflow = callable_workflow_fixture()
@@ -559,7 +568,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
             "id": "input-duplicate",
             "type": "input",
             "name": "Input duplicate",
-            "workflowPorts": [],
+            "workflowPorts": [{"id": "workflow:query", "name": "query", "type": "content"}],
         })
 
         with self.assertRaisesRegex(WorkflowValidationError, "exactly one input"):
@@ -588,43 +597,44 @@ class CallableWorkflowNodeTest(unittest.TestCase):
 
 
 class WorkflowExecutionTest(unittest.TestCase):
-    def test_content_map_outputs_mapped_value(self):
+    def test_construct_map_content_and_get(self):
         workflow_map = [
             {
-                "id": "map",
-                "type": "content_map",
-                "arguments": {
-                    "mappings": [
-                        {"key": "pending", "value": "处理中"},
-                        {"key": "done", "value": "已完成"},
-                    ]
-                },
-                "successors": {"next": 1},
-                "data_inputs": {"content-in": [None, None, "done"]},
-                "data_outputs": {"content-out": [[1, "result"]]},
-            },
-            {"data_inputs": {"result": [0, "content-out", None]}},
-        ]
-
-        workflow_content_map(0, workflow_map)
-
-        self.assertEqual(workflow_map[1]["data_inputs"]["result"][2], "已完成")
-
-    def test_content_map_rejects_unmapped_key(self):
-        workflow_map = [
-            {
-                "id": "map",
-                "type": "content_map",
+                "id": "construct",
+                "type": "construct_map_content",
                 "arguments": {"mappings": [{"key": "done", "value": "已完成"}]},
                 "successors": {"next": 1},
-                "data_inputs": {"content-in": [None, None, "missing"]},
+                "data_outputs": {"map-out": [[1, "map-in"]]},
+            },
+            {
+                "id": "get",
+                "type": "map_content_get",
+                "successors": {"next": 2},
+                "data_inputs": {"map-in": [0, "map-out", None], "key-in": [None, None, "done"]},
+                "data_outputs": {"content-out": [[2, "result"]]},
+            },
+            {"data_inputs": {"result": [1, "content-out", None]}},
+        ]
+
+        workflow_construct_map_content(0, workflow_map)
+        workflow_map_content_get(1, workflow_map)
+
+        self.assertEqual(workflow_map[2]["data_inputs"]["result"][2], "已完成")
+
+    def test_map_content_get_rejects_unmapped_key(self):
+        workflow_map = [
+            {
+                "id": "get",
+                "type": "map_content_get",
+                "successors": {"next": 1},
+                "data_inputs": {"map-in": [None, None, {"done": "已完成"}], "key-in": [None, None, "missing"]},
                 "data_outputs": {"content-out": []},
             },
             {},
         ]
 
         with self.assertRaisesRegex(ValueError, "key is not mapped"):
-            workflow_content_map(0, workflow_map)
+            workflow_map_content_get(0, workflow_map)
 
     def test_construct_message_reads_role_from_port(self):
         workflow_map = [

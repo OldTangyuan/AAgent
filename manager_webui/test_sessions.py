@@ -21,6 +21,19 @@ class SessionApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.collection.insert_one.assert_not_called()
 
+    def test_create_accepts_only_string_map_content_entries(self):
+        response = self.routes["POST", "/api/sessions"](
+            SessionValueRequest(value_type="map-content", value={"ready": "ok"})
+        )
+        self.assertNotIsInstance(response, JSONResponse)
+        for value in ({"": "empty"}, {"ready": 1}, ["ready"]):
+            with self.subTest(value=value):
+                response = self.routes["POST", "/api/sessions"](
+                    SessionValueRequest(value_type="map-content", value=value)
+                )
+                self.assertIsInstance(response, JSONResponse)
+                self.assertEqual(response.status_code, 400)
+
     def test_update_detects_concurrent_write(self):
         self.collection.find_one_and_update.return_value = None
         self.collection.find_one.return_value = {"_id": self.session_id}

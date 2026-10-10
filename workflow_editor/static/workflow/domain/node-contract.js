@@ -1,4 +1,4 @@
-export const DATA_TYPES = new Set(['content', 'message', 'event', 'list-content', 'list-message', 'list-event']);
+export const DATA_TYPES = new Set(['content', 'message', 'event', 'map-content', 'list-content', 'list-message', 'list-event']);
 
 export const NODE_TYPES = new Set([
   'input',
@@ -6,7 +6,8 @@ export const NODE_TYPES = new Set([
   'router',
   'construct_message',
   'construct_content',
-  'content_map',
+  'construct_map_content',
+  'map_content_get',
   'deserialize_json',
   'split_event',
   'construct_list',
@@ -86,12 +87,20 @@ export function portsForNode(node) {
       { id: 'content-out', direction: 'output', type: 'content', label: 'Content', title: '构造后的 Content', multiple: true },
     ];
   }
-  if (node.type === 'content_map') {
+  if (node.type === 'construct_map_content') {
     return [
-      { id: 'control-in', direction: 'input', type: 'control', label: '触发', title: '触发映射', multiple: false },
-      { id: 'content-in', direction: 'input', type: 'content', label: '输入', title: '映射键', multiple: false },
+      { id: 'control-in', direction: 'input', type: 'control', label: '触发', title: '构造 Map', multiple: false },
       { id: 'control-out', direction: 'output', type: 'control', label: '下一步', title: '下一步', multiple: false },
-      { id: 'content-out', direction: 'output', type: 'content', label: '输出', title: '映射值', multiple: true },
+      { id: 'map-out', direction: 'output', type: 'map-content', label: 'Map', title: 'Map-Content', multiple: true },
+    ];
+  }
+  if (node.type === 'map_content_get') {
+    return [
+      { id: 'control-in', direction: 'input', type: 'control', label: '触发', title: '查询 Map', multiple: false },
+      { id: 'map-in', direction: 'input', type: 'map-content', label: 'Map', title: 'Map-Content', multiple: false },
+      { id: 'key-in', direction: 'input', type: 'content', label: 'Key', title: '查找键', multiple: false },
+      { id: 'control-out', direction: 'output', type: 'control', label: '下一步', title: '下一步', multiple: false },
+      { id: 'content-out', direction: 'output', type: 'content', label: 'Content', title: '查找到的 Content', multiple: true },
     ];
   }
   if (node.type === 'split_event') {
@@ -255,7 +264,8 @@ export function createNode(type, nodes, configuration = null) {
   if (type === 'output') return { id: createWorkflowId('output'), type, name: `Output ${number}`, workflowPorts: boundaryPorts(configuration?.output_ports), ...position };
   if (type === 'construct_message') return { id: createWorkflowId('construct-message'), type, name: `构造 Message ${number}`, role_source: 'fixed', role: 'user', ...position };
   if (type === 'construct_content') return { id: createWorkflowId('construct-content'), type, name: `构造 Content ${number}`, append_items: [{ type: 'fixed', value: '' }], dataInputPorts: [], ...position };
-  if (type === 'content_map') return { id: createWorkflowId('content-map'), type, name: `Content 映射 ${number}`, mappings: [{ key: 'key1', value: '' }], ...position };
+  if (type === 'construct_map_content') return { id: createWorkflowId('construct-map-content'), type, name: `构造 Map ${number}`, mappings: [{ key: 'key1', value: '' }], ...position };
+  if (type === 'map_content_get') return { id: createWorkflowId('map-content-get'), type, name: `Map 查找 ${number}`, ...position };
   if (type === 'deserialize_json') return { id: createWorkflowId('deserialize-json'), type, name: `反序列化 JSON ${number}`, outputs: [{ key: 'value', type: 'content' }], ...position };
   if (type === 'split_event') return { id: createWorkflowId('split-event'), type, name: `拆分 Event ${number}`, ...position };
   if (type === 'construct_list') return { id: createWorkflowId('construct-list'), type, name: `构造列表 ${number}`, item_type: 'content', initial_value_count: 1, dataInputPorts: ['content-in-0'], ...position };

@@ -17,12 +17,13 @@ VALUES = {
     "list-content": ["hello"],
     "list-message": [{"role": "assistant", "content": "hello"}],
     "list-event": [{"event_type": "response", "payload": {"text": "hello"}}],
+    "map-content": {"done": "finished"},
 }
 
 
 class WorkflowSessionRepositoryTest(unittest.TestCase):
     @patch("workflow_session_repository.get_session_collection")
-    def test_six_types_create_read_and_write_without_ttl(self, get_collection):
+    def test_seven_types_create_read_and_write_without_ttl(self, get_collection):
         collection = get_collection.return_value
         collection.update_one.return_value.matched_count = 1
         for value_type, value in VALUES.items():
@@ -58,7 +59,7 @@ class WorkflowSessionRepositoryTest(unittest.TestCase):
             read_session("ses_" + "a" * 32, "content")
         with self.assertRaisesRegex(WorkflowSessionError, "ID 输入无效"):
             read_session("ses_wrong", "content")
-        for value_type, value in [("content", 3), ("event", {}), ("message", {"role": "wrong", "content": "x"}), ("list-event", [{}])]:
+        for value_type, value in [("content", 3), ("event", {}), ("message", {"role": "wrong", "content": "x"}), ("list-event", [{}]), ("map-content", {"": "empty"}), ("map-content", {"key": 1})]:
             with self.subTest(value_type=value_type, value=value), self.assertRaises(WorkflowSessionError):
                 create_session(value_type, value)
         with patch("workflow_session_repository._max_value_bytes", return_value=3):

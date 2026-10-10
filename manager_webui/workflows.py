@@ -19,7 +19,7 @@ MAX_WORKFLOW_METADATA_PORTS = 50
 MAX_WORKFLOW_NODE_REFERENCES = 50
 MAX_REMOTE_TOOL_REFERENCES = 100
 MAX_WORKFLOW_DESCRIPTION_LENGTH = 2000
-DATA_TYPES = {"content", "message", "event", "list-content", "list-message", "list-event"}
+DATA_TYPES = {"content", "message", "event", "map-content", "list-content", "list-message", "list-event"}
 
 NODE_BASE_FIELDS = {"id", "type", "name", "x", "y", "arguments"}
 NODE_SHARED_FIELDS = {"workflowPorts", "dataInputPorts", "input_ports", "output_ports"}
@@ -29,7 +29,8 @@ NODE_ARGUMENT_FIELDS_BY_TYPE = {
     "router": {"branches"},
     "construct_message": {"role", "role_source"},
     "construct_content": {"append_items"},
-    "content_map": {"mappings"},
+    "construct_map_content": {"mappings"},
+    "map_content_get": set(),
     "deserialize_json": {"outputs"},
     "split_event": set(),
     "construct_list": {"item_type", "initial_value_count"},
@@ -183,7 +184,7 @@ def node_format_error(node: dict[str, Any], index: int) -> str | None:
         output_keys = [output["key"] for output in outputs]
         if len(output_keys) != len(set(output_keys)):
             return f"nodes[{index}].arguments.outputs 的 key 不能重复"
-    if node_type == "content_map":
+    if node_type == "construct_map_content":
         mappings = arguments.get("mappings")
         if not isinstance(mappings, list) or not mappings or any(
             not isinstance(item, dict)
@@ -207,7 +208,7 @@ class WorkflowPortMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=80)
-    type: Literal["content", "message", "event", "list-content", "list-message", "list-event"]
+    type: Literal["content", "message", "event", "map-content", "list-content", "list-message", "list-event"]
 
 
 class WorkflowRequest(BaseModel):
@@ -350,7 +351,9 @@ def filter_invalid_connections(
                 return "message"
             if node_type == "construct_content" and from_port == "content-out":
                 return "content"
-            if node_type == "content_map" and from_port == "content-out":
+            if node_type == "construct_map_content" and from_port == "map-out":
+                return "map-content"
+            if node_type == "map_content_get" and from_port == "content-out":
                 return "content"
             if node_type == "split_event" and from_port in {"type-out", "payload-out"}:
                 return "content"
@@ -405,8 +408,8 @@ def filter_invalid_connections(
                 )
             ):
                 return "content"
-            if node_type == "content_map" and to_port == "content-in":
-                return "content"
+            if node_type == "map_content_get" and to_port in {"map-in", "key-in"}:
+                return "map-content" if to_port == "map-in" else "content"
             if node_type == "split_event" and to_port == "event-in":
                 return "event"
             if node_type == "deserialize_json" and to_port == "content-in":

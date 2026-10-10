@@ -5,7 +5,7 @@ import { state } from '../domain/serialization.js';
 export function bindStructureInspector(node, context) {
   if (node.type === 'router') bindBranches(node, context);
   if (node.type === 'construct_content') bindConstructContent(node, context);
-  if (node.type === 'content_map') bindContentMap(node, context);
+  if (node.type === 'construct_map_content') bindContentMap(node, context);
   if (node.type === 'deserialize_json') bindDeserializeJson(node, context);
   if (node.type === 'construct_list') bindConstructList(node, context);
   if (node.type === 'list_append') bindListAppend(node, context);
