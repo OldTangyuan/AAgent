@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="light">
   <title>AAgent Sessions</title>
   <link rel="stylesheet" href="/css/base.css">
-  <link rel="stylesheet" href="/css/sessions.css?v=3">
+  <link rel="stylesheet" href="/css/sessions.css?v=5">
 </head>
 <body>
   <header class="topbar">
@@ -27,13 +27,17 @@
         <header class="detail-head"><div><small>SESSION RECORD</small><h2 id="detailTitle">选择 Session</h2><span id="timestamp"></span></div><div class="detail-actions"><button id="copyButton" type="button" title="复制 Session ID" disabled>复制 ID</button><button id="refreshButton" type="button" title="刷新 Session" disabled>刷新</button><button id="deleteButton" type="button" class="danger" disabled>删除</button></div></header>
         <form id="sessionForm" class="form" hidden>
           <label>值类型<select id="valueType"><option value="content">content</option><option value="message">message</option><option value="event">event</option><option value="list-content">list-content</option><option value="list-message">list-message</option><option value="list-event">list-event</option></select></label>
-          <label class="value-label">值 <span id="valueHint">文本</span><textarea id="valueInput" spellcheck="false"></textarea></label>
+          <div class="value-area">
+            <div class="value-head"><span>值</span><div id="editModes" class="edit-modes" role="group" aria-label="编辑方式" hidden><button id="visualButton" type="button" aria-pressed="true">可视化</button><button id="jsonButton" type="button" aria-pressed="false">JSON</button></div></div>
+            <div id="visualEditor" class="visual-editor"></div>
+            <label id="textEditor" class="value-label" hidden><span id="inputLabel">文本</span><textarea id="valueInput" spellcheck="false"></textarea></label>
+          </div>
           <footer><span id="formStatus" role="status"></span><button id="cancelButton" type="button">取消</button><button class="primary" type="submit">保存</button></footer>
         </form>
         <div id="emptyDetail" class="empty-detail">选择左侧 Session 或新建记录</div>
       </section>
     </div>
   </main>
-  <script type="module" src="/sessions.js?v=3"></script>
+  <script type="module" src="/sessions.js?v=5"></script>
 </body>
 </html>

@@ -3,7 +3,8 @@ import { createSession, deleteSession, fetchSession, fetchSessions, updateSessio
 const elements = Object.fromEntries([
   'createButton', 'searchInput', 'searchButton', 'sessionList', 'listStatus', 'moreButton',
   'detailTitle', 'timestamp', 'copyButton', 'refreshButton', 'deleteButton', 'sessionForm',
-  'valueType', 'valueInput', 'valueHint', 'formStatus', 'cancelButton', 'emptyDetail',
+  'valueType', 'valueInput', 'inputLabel', 'visualEditor', 'textEditor', 'editModes', 'visualButton',
+  'jsonButton', 'formStatus', 'cancelButton', 'emptyDetail',
 ].map((id) => [id, document.getElementById(id)]));
 
 let current = null;
@@ -13,6 +14,173 @@ let query = '';
 let listGeneration = 0;
 let detailGeneration = 0;
 let busy = false;
+let draft = '';
+let draftType = 'content';
+let mode = 'visual';
+let baseline = '';
+
+const roles = ['system', 'user', 'assistant', 'tool'];
+function initialValue(type) {
+  if (type === 'content') return '';
+  if (type.startsWith('list-')) return [];
+  if (type === 'message') return { role: 'user', content: '' };
+  return { event_type: '', payload: {} };
+}
+function copy(value) { return JSON.parse(JSON.stringify(value)); }
+function checkValue(type, value) {
+  const itemType = type.replace(/^list-/, '');
+  if (type.startsWith('list-')) {
+    if (!Array.isArray(value)) throw new Error('值必须是数组');
+    value.forEach((item, index) => checkItem(itemType, item, `第 ${index} 项`));
+  } else checkItem(itemType, value, '值');
+}
+function checkItem(type, value, label) {
+  if (type === 'content') {
+    if (typeof value !== 'string') throw new Error(`${label}必须是文本`);
+  } else if (type === 'message') {
+    if (!value || Array.isArray(value) || typeof value !== 'object' ||
+        Object.keys(value).sort().join(',') !== 'content,role' ||
+        !roles.includes(value.role) || typeof value.content !== 'string') {
+      throw new Error(`${label}必须包含合法 role 和文本 content，且不能有其他字段`);
+    }
+  } else if (!value || Array.isArray(value) || typeof value !== 'object' ||
+             typeof value.event_type !== 'string' || !value.event_type ||
+             !Object.hasOwn(value, 'payload')) {
+    throw new Error(`${label}需要非空 event_type 和 payload`);
+  }
+}
+function parseJson(text, label) {
+  try { return JSON.parse(text); }
+  catch { throw new Error(`${label}请输入有效的 JSON`); }
+}
+function field(label, value, name, multiline = false) {
+  const wrapper = document.createElement('label');
+  wrapper.textContent = label;
+  const input = document.createElement(multiline ? 'textarea' : 'input');
+  input.dataset.field = name;
+  input.value = value;
+  if (multiline) input.spellcheck = false;
+  wrapper.append(input);
+  return wrapper;
+}
+function itemEditor(type, value) {
+  const editor = document.createElement('div');
+  editor.className = 'item-fields';
+  if (type === 'content') editor.append(field('内容', value, 'content', true));
+  if (type === 'message') {
+    const wrapper = document.createElement('label');
+    wrapper.textContent = '角色';
+    const select = document.createElement('select');
+    select.dataset.field = 'role';
+    for (const role of roles) {
+      const option = document.createElement('option');
+      option.value = option.textContent = role;
+      select.append(option);
+    }
+    select.value = value.role;
+    wrapper.append(select);
+    editor.append(wrapper, field('内容', value.content, 'content', true));
+  }
+  if (type === 'event') {
+    const extras = Object.fromEntries(Object.entries(value).filter(([key]) => !['event_type', 'payload'].includes(key)));
+    editor.append(field('事件类型', value.event_type, 'event_type'),
+      field('Payload (JSON)', JSON.stringify(value.payload, null, 2), 'payload', true),
+      field('扩展字段 (JSON 对象)', JSON.stringify(extras, null, 2), 'extras', true));
+  }
+  return editor;
+}
+function readItem(type, editor, label) {
+  const get = (name) => editor.querySelector(`[data-field="${name}"]`).value;
+  if (type === 'content') return get('content');
+  if (type === 'message') return { role: get('role'), content: get('content') };
+  const payload = parseJson(get('payload'), `${label} payload：`);
+  const extras = parseJson(get('extras'), `${label}扩展字段：`);
+  if (!extras || Array.isArray(extras) || typeof extras !== 'object' ||
+      Object.hasOwn(extras, 'event_type') || Object.hasOwn(extras, 'payload')) {
+    throw new Error(`${label}扩展字段必须是对象，不能覆盖 event_type 或 payload`);
+  }
+  return { event_type: get('event_type'), payload, ...extras };
+}
+function readVisual() {
+  const type = draftType.replace(/^list-/, '');
+  if (draftType.startsWith('list-')) {
+    return [...elements.visualEditor.querySelectorAll('.list-item')].map((row, index) =>
+      readItem(type, row, `第 ${index} 项`));
+  }
+  return readItem(type, elements.visualEditor, '值');
+}
+function readDraft() {
+  const value = draftType === 'content' ? elements.valueInput.value :
+    mode === 'json' ? parseJson(elements.valueInput.value, '值：') : readVisual();
+  checkValue(draftType, value);
+  return value;
+}
+function dirty() {
+  if (!current && !creating) return false;
+  try {
+    const value = draftType === 'content' ? elements.valueInput.value :
+      mode === 'json' ? parseJson(elements.valueInput.value, '值：') : readVisual();
+    return JSON.stringify(value) !== baseline;
+  } catch { return true; }
+}
+function mayDiscard() { return !dirty() || window.confirm('有未保存的修改，确定丢弃吗？'); }
+function renderEditor() {
+  const type = draftType;
+  elements.inputLabel.textContent = type === 'content' ? '文本' : 'JSON';
+  elements.editModes.hidden = type === 'content';
+  elements.visualButton.setAttribute('aria-pressed', String(mode === 'visual'));
+  elements.jsonButton.setAttribute('aria-pressed', String(mode === 'json'));
+  elements.textEditor.hidden = type !== 'content' && mode !== 'json';
+  elements.visualEditor.hidden = type === 'content' || mode === 'json';
+  if (type === 'content' || mode === 'json') {
+    elements.valueInput.value = type === 'content' ? draft : JSON.stringify(draft, null, 2);
+    return;
+  }
+  elements.visualEditor.replaceChildren();
+  if (!type.startsWith('list-')) {
+    elements.visualEditor.append(itemEditor(type, draft));
+    return;
+  }
+  const itemType = type.slice(5);
+  const list = document.createElement('div');
+  list.className = 'editor-list';
+  for (const [index, value] of draft.entries()) {
+    const row = document.createElement('section');
+    row.className = 'list-item';
+    const heading = document.createElement('div');
+    heading.className = 'item-head';
+    const title = document.createElement('strong');
+    title.textContent = `#${index}  ${itemType === 'content' ? value.slice(0, 45) : itemType === 'message' ? value.role : value.event_type}`;
+    const actions = document.createElement('div');
+    for (const [text, action, unavailable] of [
+      ['↑', 'up', index === 0], ['↓', 'down', index === draft.length - 1], ['删除', 'remove', false],
+    ]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = text;
+      button.title = `${text}第 ${index} 项`;
+      button.setAttribute('aria-label', button.title);
+      button.dataset.action = action;
+      if (unavailable) button.disabled = true;
+      actions.append(button);
+    }
+    heading.append(title, actions);
+    row.append(heading, itemEditor(itemType, value));
+    list.append(row);
+  }
+  const add = document.createElement('button');
+  add.type = 'button';
+  add.dataset.action = 'add';
+  add.textContent = '+ 添加一项';
+  elements.visualEditor.append(list, add);
+}
+function setDraft(type, value) {
+  draftType = type;
+  draft = copy(value);
+  baseline = JSON.stringify(value);
+  mode = 'visual';
+  renderEditor();
+}
 
 function report(message) { elements.formStatus.textContent = message; }
 function setBusy(value) { busy = value; elements.sessionForm.dataset.busy = String(value); }
@@ -31,16 +199,7 @@ function showDetail() {
   elements.refreshButton.disabled = !current || creating;
   elements.deleteButton.disabled = !current || creating;
   elements.valueType.disabled = Boolean(current);
-  elements.valueHint.textContent = elements.valueType.value === 'content' ? '文本' : 'JSON';
   updateSelection();
-}
-function displayValue(valueType, value) {
-  return valueType === 'content' ? value : JSON.stringify(value, null, 2);
-}
-function parseValue() {
-  if (elements.valueType.value === 'content') return elements.valueInput.value;
-  try { return JSON.parse(elements.valueInput.value); }
-  catch { throw new Error('请输入有效的 JSON 值'); }
 }
 async function loadList(append = false) {
   const generation = ++listGeneration;
@@ -77,7 +236,7 @@ async function loadList(append = false) {
   }
 }
 async function openSession(id) {
-  if (busy) return;
+  if (busy || !mayDiscard()) return;
   const generation = ++detailGeneration;
   elements.listStatus.textContent = '读取中';
   report('读取中');
@@ -87,7 +246,7 @@ async function openSession(id) {
     current = document;
     creating = false;
     elements.valueType.value = document.value_type;
-    elements.valueInput.value = displayValue(document.value_type, document.value);
+    setDraft(document.value_type, document.value);
     report('');
     showDetail();
     elements.listStatus.textContent = '';
@@ -106,26 +265,67 @@ elements.searchInput.addEventListener('keydown', (event) => {
 });
 elements.moreButton.addEventListener('click', () => loadList(true));
 elements.createButton.addEventListener('click', () => {
-  if (busy) return;
+  if (busy || !mayDiscard()) return;
   ++detailGeneration;
   current = null;
   creating = true;
   elements.valueType.value = 'content';
-  elements.valueInput.value = '';
+  setDraft('content', '');
   report('');
   showDetail();
   elements.valueInput.focus();
 });
 elements.valueType.addEventListener('change', () => {
-  elements.valueHint.textContent = elements.valueType.value === 'content' ? '文本' : 'JSON';
-  if (creating) elements.valueInput.value = elements.valueType.value === 'content' ? '' : elements.valueType.value.startsWith('list-') ? '[]' : '{}';
-});
-elements.cancelButton.addEventListener('click', () => {
-  if (busy) return;
-  if (creating) { creating = false; showDetail(); return; }
-  if (current) elements.valueInput.value = displayValue(current.value_type, current.value);
+  const type = elements.valueType.value;
+  if (dirty() && !window.confirm('切换类型会丢弃当前的值，确定继续吗？')) {
+    elements.valueType.value = draftType;
+    return;
+  }
+  setDraft(type, initialValue(type));
   report('');
 });
+elements.cancelButton.addEventListener('click', () => {
+  if (busy || !mayDiscard()) return;
+  if (creating) { creating = false; showDetail(); return; }
+  if (current) setDraft(current.value_type, current.value);
+  report('');
+});
+elements.jsonButton.addEventListener('click', () => {
+  if (mode === 'json') return;
+  try { draft = readVisual(); }
+  catch (error) { report(error.message); return; }
+  mode = 'json';
+  renderEditor();
+  report('');
+});
+elements.visualButton.addEventListener('click', () => {
+  if (mode === 'visual') return;
+  try { draft = readDraft(); }
+  catch (error) { report(error.message); return; }
+  mode = 'visual';
+  renderEditor();
+  report('');
+});
+elements.visualEditor.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-action]');
+  if (!button) return;
+  const action = button.dataset.action;
+  const row = button.closest('.list-item');
+  if (action === 'remove') row.remove();
+  try { draft = readVisual(); }
+  catch (error) { report(error.message); return; }
+  const index = [...elements.visualEditor.querySelectorAll('.list-item')].indexOf(row);
+  if (action === 'add') draft.push(initialValue(draftType.slice(5)));
+  if (action === 'up' || action === 'down') {
+    const other = index + (action === 'up' ? -1 : 1);
+    [draft[index], draft[other]] = [draft[other], draft[index]];
+  }
+  renderEditor();
+  report('');
+});
+elements.visualEditor.addEventListener('input', () => { report(''); });
+elements.valueInput.addEventListener('input', () => { report(''); });
+window.addEventListener('beforeunload', (event) => { if (dirty()) event.preventDefault(); });
 elements.copyButton.addEventListener('click', async () => {
   if (!current) return;
   try { await navigator.clipboard.writeText(current.id); report('ID 已复制'); }
@@ -133,7 +333,7 @@ elements.copyButton.addEventListener('click', async () => {
 });
 elements.refreshButton.addEventListener('click', () => { if (current && !busy) openSession(current.id); });
 elements.deleteButton.addEventListener('click', async () => {
-  if (!current || busy || !window.confirm(`删除 Session ${current.id}？此操作不可撤销。`)) return;
+  if (!current || busy || !mayDiscard() || !window.confirm(`删除 Session ${current.id}？此操作不可撤销。`)) return;
   setBusy(true);
   try {
     await deleteSession(current.id);
@@ -149,7 +349,7 @@ elements.sessionForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (busy) return;
   let value;
-  try { value = parseValue(); }
+  try { value = readDraft(); }
   catch (error) { report(error.message); return; }
   setBusy(true);
   report('保存中');
@@ -159,7 +359,7 @@ elements.sessionForm.addEventListener('submit', async (event) => {
       : await updateSession(current.id, current.value_type, value, current.updated_at);
     current = document;
     creating = false;
-    elements.valueInput.value = displayValue(document.value_type, document.value);
+    setDraft(document.value_type, document.value);
     showDetail();
     report('已保存');
     await loadList();
