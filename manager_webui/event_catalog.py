@@ -64,7 +64,7 @@ EVENT_CATALOG = [
         "event_type": "workflow",
         "scope": "main_queue",
         "title": "Workflow 执行",
-        "description": "触发当前激活 Workflow，并按输入端口名称传播 payload。",
+        "description": "按 payload.workflow_id 执行 Workflow，并按输入端口名称传播 payload。",
         "producer": "agent/task_worker.py",
         "consumer": "agent/task_worker.py",
         "schema": {
@@ -75,12 +75,39 @@ EVENT_CATALOG = [
                 "event_type": {"const": "workflow"},
                 "payload": {
                     "type": "object",
-                    "required": ["content", "source"],
+                    "required": ["workflow_id"],
                     "properties": {
+                        "workflow_id": {"type": "string"},
                         "content": {},
-                        "source": {"enum": ["qq", "terminal"]},
+                        "source": {"type": "string"},
                     },
                     "additionalProperties": True,
+                },
+            },
+            "additionalProperties": True,
+        },
+    },
+    {
+        "event_type": "error",
+        "scope": "main_queue",
+        "title": "Workflow 错误",
+        "description": "目标 Workflow 不存在时记录错误，不触发后续处理。",
+        "producer": "agent/task_worker.py",
+        "consumer": "agent/task_worker.py",
+        "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": ["event_type", "payload"],
+            "properties": {
+                "event_type": {"const": "error"},
+                "payload": {
+                    "type": "object",
+                    "required": ["workflow_id", "message"],
+                    "properties": {
+                        "workflow_id": {"type": "string"},
+                        "message": {"const": "workflow not found"},
+                    },
+                    "additionalProperties": False,
                 },
             },
             "additionalProperties": True,

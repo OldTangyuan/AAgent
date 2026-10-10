@@ -10,12 +10,17 @@ class EventCatalogTest(unittest.TestCase):
 
         self.assertEqual(
             set(items),
-            {"qq", "terminal", "workflow", "response", "async_result", "raw"},
+            {"qq", "terminal", "workflow", "error", "response", "async_result", "raw"},
         )
-        self.assertEqual(catalog["count"], 6)
+        self.assertEqual(catalog["count"], 7)
         self.assertEqual(
             {item["event_type"] for item in catalog["items"] if item["scope"] == "main_queue"},
-            {"qq", "terminal", "workflow", "response"},
+            {"qq", "terminal", "workflow", "error", "response"},
+        )
+
+        self.assertEqual(items["workflow"]["schema"]["properties"]["payload"]["required"], ["workflow_id"])
+        self.assertEqual(
+            items["error"]["schema"]["properties"]["payload"]["required"], ["workflow_id", "message"]
         )
 
     def test_each_schema_identifies_its_event_type_and_payload(self):

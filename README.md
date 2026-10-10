@@ -78,7 +78,7 @@ flowchart LR
     Terminal -->|terminal Event| MainQueue
     Future -.->|适配为 workflow Event| MainQueue
     MainQueue -->|BRPOP| Agent[agent / task_worker]
-    Agent --> Workflow[激活的 Workflow]
+    Agent --> Workflow[绑定选定的 Workflow]
     Workflow -->|HTTP: sync / async| ToolServer[tool_server]
     ToolServer -->|同步结果 / task_id| Workflow
     ToolServer <-->|WebSocket| Provider[tool_provider]

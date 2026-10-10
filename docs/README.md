@@ -13,6 +13,7 @@
 | [21-Workflow Context节点设计](21-Workflow%20Context节点设计.md) | Workflow 可变 Context、Redis 生命周期与 foreach 累积方式 |
 | [22-Workflow反序列化JSON节点设计](22-Workflow反序列化JSON节点设计.md) | 将 JSON Content 的顶层键转换为动态强类型输出端口 |
 | [23-Workflow Session节点与管理页设计](23-Workflow%20Session节点与管理页设计.md) | 跨 Workflow 持久 Session 节点与 Manager 管理页方案 |
+| [24-Event绑定与Workflow路由设计](24-Event绑定与Workflow路由设计.md) | 按事件绑定路由 Workflow、无绑定行为与 Error Event 的目标方案 |
 | [废弃旧文档](废弃旧文档/) | 已归档的旧架构和旧协议，只用于追溯 |
 | [审查日志](审查日志/) | 特定时间点的代码审查、问题和修复记录 |
 
@@ -21,6 +22,7 @@
 | 目标 | 阅读路径 |
 |------|----------|
 | 理解 Event 与队列 | [20-Event协议与流转](20-Event协议与流转.md) |
+| 理解事件绑定目标设计 | [24-Event绑定与Workflow路由设计](24-Event绑定与Workflow路由设计.md) |
 | 理解远程 Tool | [17-Tool Server设计](17-Tool%20Server设计.md) → [18-Tool Server内核实现](18-Tool%20Server内核实现.md) |
 | 理解 Workflow Tool 节点 | [19-Workflow本地与远程Tool节点拆分](19-Workflow本地与远程Tool节点拆分.md) |
 | 理解 Workflow 可变状态 | [21-Workflow Context节点设计](21-Workflow%20Context节点设计.md) |

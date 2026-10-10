@@ -1,9 +1,9 @@
 # 20 Event 协议与流转
 
-本文只描述当前 **Workflow + Tool Server** 架构中的 Event。主队列 Event 负责把外部输入送入 Workflow，并记录 Workflow 的最终输出：
+本文描述当前 **Workflow + Tool Server** 架构中的 Event。主队列 Event 负责按绑定把外部输入送入 Workflow，并记录 Workflow 的最终输出或目标不存在的错误：
 
 ```text
-外部输入 -> qq / terminal -> workflow -> response
+外部输入 -> qq / terminal / 其他已绑定事件 -> workflow -> response / error
 ```
 
 Workflow 的 Tool 节点直接调用本地执行器或 Tool Server，不通过主 Event 分发器。
@@ -13,7 +13,7 @@ Workflow 的 Tool 节点直接调用本地执行器或 Tool Server，不通过�
 ```json
 {
   "event_type": "workflow",
-  "payload": {}
+  "payload": {"workflow_id": "66aabbccddeeff0011223344"}
 }
 ```
 
@@ -22,9 +22,9 @@ Workflow 的 Tool 节点直接调用本地执行器或 Tool Server，不通过�
 - Event 出队后，主 worker 会复制 Event、追加 UTC `created_at`，再写入 MongoDB；
 - MongoDB 自动生成 `_id`；
 - `terminal` 生产者还会添加顶层 `time`，主 worker 不读取该字段；
-- 主队列当前只接受 `qq`、`terminal`、`workflow`、`response`。
+- `workflow`、`response`、`error` 是内部 Event；其他 Event 按 `event_type` 查询启用的绑定。
 
-未知 `event_type` 会先写入历史，然后因没有 handler 而处理失败。
+未绑定的 Event 只写入历史，不发布后续 Event。绑定查询出错会报告处理错误，不视为未绑定。
 
 ## 2. 队列与顺序
 
@@ -60,8 +60,8 @@ flowchart LR
     QQAdapter -->|授权私聊: LPUSH qq| MainQueue[主队列]
     WebUI -->|RPUSH terminal| MainQueue
     MainQueue -->|BRPOP| Worker[Workflow worker]
-    Worker -->|LPUSH workflow / response| MainQueue
-    Worker --> Workflow[激活的 Workflow]
+    Worker -->|LPUSH workflow / response / error| MainQueue
+    Worker --> Workflow[绑定选定的 Workflow]
     Workflow -->|HTTP| ToolServer[Tool Server]
 ```
 
@@ -69,10 +69,13 @@ flowchart LR
 
 | `event_type` | 生产者 | 消费者 | 作用 |
 |--------------|--------|--------|------|
-| `qq` | QQ listener，经 QQ consumer 筛选 | 主 worker | 把授权 QQ 私聊转换为 `workflow` |
-| `terminal` | WebUI `POST /api/terminal` | 主 worker | 把终端输入转换为 `workflow` |
-| `workflow` | 主 worker 的输入 handler | 主 worker | 执行当前激活的 Workflow |
+| `qq` | QQ listener，经 QQ consumer 筛选 | 主 worker | 有启用绑定时透传 payload 并发布 `workflow` |
+| `terminal` | WebUI `POST /api/terminal` | 主 worker | 有启用绑定时透传 payload 并发布 `workflow` |
+| `workflow` | 主 worker 的绑定路由 | 主 worker | 按 `payload.workflow_id` 执行 Workflow |
 | `response` | `workflow` handler | 主 worker | 将最终输出写入事件历史 |
+| `error` | `workflow` handler | 主 worker | 目标 Workflow 不存在时记录错误，不执行其他操作 |
+
+其他 `event_type` 也可通过同一绑定机制触发 Workflow，不限于上表的外部输入示例。`response` / `error` 不参与绑定路由。
 
 WebUI 会用 `raw` 包装无法解析为 JSON 对象的队列内容。`raw` 只是展示类型，不是主 worker 协议。
 
@@ -115,14 +118,18 @@ WebUI 会用 `raw` 包装无法解析为 JSON 对象的队列内容。`raw` 只�
 - `group_id` 为空；
 - `user_id == QQ_TARGET_USER_ID`。
 
-主 worker 将 `raw_message` 转换为：
+若 `qq` 有启用绑定，主 worker 透传 QQ payload 并注入绑定的 `workflow_id`，例如：
 
 ```json
 {
   "event_type": "workflow",
   "payload": {
-    "content": "执行任务",
-    "source": "qq"
+    "post_type": "message",
+    "user_id": 3363336986,
+    "group_id": null,
+    "raw_message": "执行任务",
+    "message": [{"type": "text", "data": {"text": "执行任务"}}],
+    "workflow_id": "66aabbccddeeff0011223344"
   }
 }
 ```
@@ -134,15 +141,15 @@ WebUI 会用 `raw` 包装无法解析为 JSON 对象的队列内容。`raw` 只�
   "event_type": "terminal",
   "time": "2026-09-18T12:00:00.000Z",
   "payload": {
-    "message": "执行任务",
+    "content": "执行任务",
     "files": []
   }
 }
 ```
 
-- `message` 去除首尾空白后必须非空，最大 4000 个字符；
+- `content` 去除首尾空白后必须非空，最大 4000 个字符；
 - `files` 当前必须为空；
-- 主 worker 将其转换为 `workflow`，其中 `content = message`、`source = "terminal"`。
+- 终端生产者写入 `content` 与 `files`；主 worker 不重命名字段，只追加绑定的 `workflow_id`。
 
 ### 4.3 `workflow`
 
@@ -151,23 +158,35 @@ WebUI 会用 `raw` 包装无法解析为 JSON 对象的队列内容。`raw` 只�
   "event_type": "workflow",
   "payload": {
     "content": "执行任务",
-    "source": "terminal"
+    "files": [],
+    "workflow_id": "66aabbccddeeff0011223344"
   }
 }
 ```
 
-`source` 当前为 `qq` 或 `terminal`。主 worker 的执行过程：
+`workflow_id` 是必填的保留字段，由绑定路由写入；原事件 payload 中的同名字段会被覆盖。主 worker 的执行过程：
 
-1. 从 MongoDB settings 集合读取 `_id = "agent"` 的 `workflow_id`；
-2. 读取、校验并解析该 Workflow；
+1. 从 Event payload 读取 `workflow_id`，按该 ID 查找 Workflow；若不存在，发布 `error` Event 后结束；
+2. 校验并解析找到的 Workflow；
 3. 找到 `input` 节点；
 4. 按 Workflow 输入端口的 `name` 从 Event payload 读取同名字段；
 5. 同步执行 `run_workflow_map()`；
 6. 把最终输出转换为 `response` 并普通入队。
 
-入口 Workflow 若要接收标准输入，应声明 `content` 和 `source` 输入端口。payload 中不存在的字段会以 `None` 传播，而运行时会把 `None` 判断为“没有值”。
+入口 Workflow 按需要声明与 payload 字段同名的输入端口；`workflow_id` 也可声明为输入元数据，不声明不影响执行。QQ 的消息字段为 `raw_message`，终端消息字段为 `content`。payload 中不存在的字段会以 `None` 传播，而运行时会把 `None` 判断为“没有值”。
 
-### 4.4 `response`
+### 4.4 `error`
+
+```json
+{
+  "event_type": "error",
+  "payload": {"workflow_id": "66aabbccddeeff0011223344", "message": "workflow not found"}
+}
+```
+
+仅在按 ID 查找目标 Workflow 不存在时发布。`error` handler 只负责让该事件写入历史，不重新路由；其他执行错误不属于此事件的生成范围。
+
+### 4.5 `response`
 
 ```json
 {
@@ -241,8 +260,9 @@ OneBot
   -> LPUSH main_agent_queue: qq
   -> 主 worker BRPOP
   -> 写入 event_history
-  -> LPUSH workflow {content, source: "qq"}
-  -> 执行激活的 Workflow
+  -> 查启用绑定；未命中则结束
+  -> LPUSH workflow {原 QQ payload, workflow_id}
+  -> 按 workflow_id 执行 Workflow（不存在则 LPUSH error）
   -> LPUSH response
   -> 写入 event_history
 ```
@@ -254,13 +274,14 @@ POST /api/terminal
   -> RPUSH main_agent_queue: terminal
   -> 主 worker BRPOP
   -> 写入 event_history
-  -> LPUSH workflow {content, source: "terminal"}
-  -> 执行激活的 Workflow
+  -> 查启用绑定；未命中则结束
+  -> LPUSH workflow {原终端 payload, workflow_id}
+  -> 按 workflow_id 执行 Workflow（不存在则 LPUSH error）
   -> LPUSH response
   -> 写入 event_history
 ```
 
-`terminal` 本身具有插队优先级，但它产生的 `workflow` 使用普通 `LPUSH`，不会继承该优先级。
+`terminal` 本身具有插队优先级，但它产生的 `workflow` 使用普通 `LPUSH`，不会继承该优先级。上述路径中的 `response` 只在 Workflow 成功执行时产生；目标不存在时产生的是 `error`。
 
 ## 7. 历史与 WebUI
 
@@ -284,7 +305,7 @@ WebUI `/api/events` 合并三种来源：
 新增或修改 Event 时，至少同步检查：
 
 1. 生产者构造的 `event_type` 和 payload；
-2. `agent/task_worker.py` 的 `handle_map`；
+2. `agent/task_worker.py` 的绑定路由与内部事件分支；
 3. 入队和出队方向是否形成预期顺序；
 4. 是否需要进入 MongoDB 历史和 WebUI 时间线；
 5. Tool Server callback 是否有专用消费者；
