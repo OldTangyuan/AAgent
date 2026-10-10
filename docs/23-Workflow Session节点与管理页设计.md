@@ -8,7 +8,7 @@ Session 是跨 Workflow、跨执行实例共享的带类型可变值。它不绑
 
 ## 2. 身份与节点契约
 
-- 节点类型：`session_create`、`session_read`、`session_write`，节点面板参数均为 `arguments.value_type`；其可选类型与 Context 对齐：`content`、`message`、`event`、`list-content`、`list-message`、`event-list`。
+- 节点类型：`session_create`、`session_read`、`session_write`，节点面板参数均为 `arguments.value_type`；其可选类型与 Context 对齐：`content`、`message`、`event`、`list-content`、`list-message`、`list-event`。
 - `session_create`：输入 `control-in`、`initial-value: value_type`；输出 `control-out`、`session-id: content`。值必填，后端生成 `ses_<uuid4 hex>`，不由调用方指定 ID。
 - `session_read`：输入 `control-in`、`session-id: content`；输出 `control-out`、`value-out: value_type`。
 - `session_write`：输入 `control-in`、`session-id: content`、`value-in: value_type`；输出 `control-out`、`session-id: content`、`value-out: value_type`。只允许覆盖已有 Session，不隐式创建，不允许改变其 `value_type`。
@@ -31,7 +31,7 @@ Session 是跨 Workflow、跨执行实例共享的带类型可变值。它不绑
 
 覆盖使用 `updated_at` 条件更新并将时间版本至少递增 1 毫秒。节点写入遇到并发覆盖时重读版本并重试，因此节点间最后成功提交者生效；读-改-写不是原子操作，页面编辑期间节点也可能写入。管理页保存带上读取时的 `updated_at` 做条件更新，冲突时返回 409 并提示刷新，不自动覆盖编辑框内容。删除后节点的读写返回不存在；并发删除/覆盖以数据库提交顺序为准。
 
-注意现有 `workflow_context_repository.py` 虽列出 `event` / `event-list`，其 `_valid_value` 目前并未处理这两类。实施时要为 Session 定义完整的六类型校验，并补测事件对象结构；如要复用校验器，须先解决这一差异，不能直接把当前 `_valid_value` 当作六类型校验器。Session 的值协议以现有 Workflow event 数据结构为准，管理页输入也按同一规则校验。
+注意现有 `workflow_context_repository.py` 虽列出 `event` / `list-event`，其 `_valid_value` 目前并未处理这两类。实施时要为 Session 定义完整的六类型校验，并补测事件对象结构；如要复用校验器，须先解决这一差异，不能直接把当前 `_valid_value` 当作六类型校验器。Session 的值协议以现有 Workflow event 数据结构为准，管理页输入也按同一规则校验。
 
 ## 4. 管理页
 

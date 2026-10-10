@@ -1,4 +1,4 @@
-export const DATA_TYPES = new Set(['content', 'message', 'event', 'list-content', 'list-message', 'event-list']);
+export const DATA_TYPES = new Set(['content', 'message', 'event', 'list-content', 'list-message', 'list-event']);
 
 export const NODE_TYPES = new Set([
   'input',
@@ -41,7 +41,7 @@ export function boundaryPorts(ports) {
 }
 
 function listTypeForItem(itemType) {
-  return itemType === 'event' ? 'event-list' : `list-${itemType}`;
+  return `list-${itemType}`;
 }
 
 export function portsForNode(node) {
@@ -150,7 +150,7 @@ export function portsForNode(node) {
     return [
       { id: 'control-in', direction: 'input', type: 'control', label: '触发', title: '触发查询', multiple: false },
       { id: 'control-out', direction: 'output', type: 'control', label: '下一步', title: '下一步', multiple: false },
-      { id: 'events', direction: 'output', type: 'event-list', label: '事件', title: '最近的事件列表', multiple: true },
+      { id: 'events', direction: 'output', type: 'list-event', label: '事件', title: '最近的事件列表', multiple: true },
     ];
   }
   if (node.type === 'context_create' || node.type === 'session_create') {

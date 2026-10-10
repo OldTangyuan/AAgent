@@ -30,7 +30,7 @@ const CONNECTION_COLORS = {
   event: '#147d78',
   'list-content': '#d12f72',
   'list-message': '#7a3e88',
-  'event-list': '#147d78',
+  'list-event': '#147d78',
 };
 
 function escapeXml(value) {

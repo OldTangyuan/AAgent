@@ -43,8 +43,6 @@ def read_bound_workflow_id(event_type: str) -> str | None:
 def handle_task(e: dict):
     record_history(e)
     event_type = e["event_type"]
-    if event_type in ("response", "error"):
-        return
     if event_type != "workflow":
         workflow_id = read_bound_workflow_id(event_type)
         if workflow_id is not None:

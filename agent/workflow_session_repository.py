@@ -19,7 +19,7 @@ SESSION_VALUE_TYPES = {
     "event",
     "list-content",
     "list-message",
-    "event-list",
+    "list-event",
 }
 SESSION_ID_PATTERN = re.compile(r"^ses_[0-9a-f]{32}$")
 
@@ -61,7 +61,7 @@ def valid_value(value_type: str, value: Any) -> bool:
         return isinstance(value, list) and all(isinstance(item, str) for item in value)
     if value_type == "list-message":
         return isinstance(value, list) and all(_is_message(item) for item in value)
-    if value_type == "event-list":
+    if value_type == "list-event":
         return isinstance(value, list) and all(_is_event(item) for item in value)
     return False
 

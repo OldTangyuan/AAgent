@@ -114,7 +114,7 @@ class WorkflowConnectionFilterTest(unittest.TestCase):
             "fromPortId": "events",
             "toId": "foreach",
             "toPortId": "list-in",
-            "type": "event-list",
+            "type": "list-event",
         }
 
         _, connections = filter_invalid_connections(nodes, [connection], [], [])
@@ -253,7 +253,7 @@ class WorkflowConnectionFilterTest(unittest.TestCase):
         self.assertEqual(connections, [connection])
 
     def test_preserves_context_connections_for_matching_value_type(self):
-        for value_type in ("content", "message", "event", "list-content", "list-message", "event-list"):
+        for value_type in ("content", "message", "event", "list-content", "list-message", "list-event"):
             with self.subTest(value_type=value_type):
                 nodes = [
                     {

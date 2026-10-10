@@ -220,7 +220,7 @@ function normalizeNode(node, inputPorts, outputPorts, callableWorkflows, remoteT
         || !output.key
         || output.key === 'control-out'
         || outputKeys.has(output.key)
-        || !['content', 'message', 'event', 'list-content', 'list-message', 'event-list'].includes(output.type)
+        || !['content', 'message', 'event', 'list-content', 'list-message', 'list-event'].includes(output.type)
       ) return null;
       outputKeys.add(output.key);
       normalized.outputs.push({ key: output.key, type: output.type });
@@ -244,7 +244,7 @@ function normalizeNode(node, inputPorts, outputPorts, callableWorkflows, remoteT
     normalized.limit = Number.isInteger(node.limit) ? Math.min(1000, Math.max(1, node.limit)) : 10;
   }
   if (['context_create', 'context_read', 'context_write', 'session_create', 'session_read', 'session_write'].includes(node.type)) {
-    if (!['content', 'message', 'event', 'list-content', 'list-message', 'event-list'].includes(node.value_type)) return null;
+    if (!['content', 'message', 'event', 'list-content', 'list-message', 'list-event'].includes(node.value_type)) return null;
     normalized.value_type = node.value_type;
   }
   if (['local_tool', 'remote_sync_tool', 'remote_async_tool'].includes(node.type)) {
@@ -268,7 +268,7 @@ function normalizeNode(node, inputPorts, outputPorts, callableWorkflows, remoteT
           || !parameter.name
           || parameter.name === 'control-in'
           || parameterNames.has(parameter.name)
-          || !['content', 'message', 'event', 'list-content', 'list-message', 'event-list'].includes(parameter.type)
+          || !['content', 'message', 'event', 'list-content', 'list-message', 'list-event'].includes(parameter.type)
         ) return null;
         parameterNames.add(parameter.name);
         normalized.parameters.push({ name: parameter.name, type: parameter.type });
@@ -287,7 +287,7 @@ function normalizeNode(node, inputPorts, outputPorts, callableWorkflows, remoteT
             || !output.name
             || output.name === 'control-out'
             || outputNames.has(output.name)
-            || !['content', 'message', 'event', 'list-content', 'list-message', 'event-list'].includes(output.type)
+            || !['content', 'message', 'event', 'list-content', 'list-message', 'list-event'].includes(output.type)
           ) return null;
           outputNames.add(output.name);
           normalized.outputs.push({ name: output.name, type: output.type });

@@ -187,7 +187,7 @@ function bindDeserializeJson(node, context) {
   node.outputs.forEach((output, index) => {
     const row = document.createElement('div');
     row.className = 'json-output-row';
-    row.innerHTML = '<span class="route-index"></span><input data-output-key maxlength="80" aria-label="JSON 键"><select data-output-type aria-label="输出类型"><option value="content">content</option><option value="message">message</option><option value="event">event</option><option value="list-content">list-content</option><option value="list-message">list-message</option><option value="event-list">event-list</option></select><button type="button" class="branch-delete" title="删除输出">×</button>';
+    row.innerHTML = '<span class="route-index"></span><input data-output-key maxlength="80" aria-label="JSON 键"><select data-output-type aria-label="输出类型"><option value="content">content</option><option value="message">message</option><option value="event">event</option><option value="list-content">list-content</option><option value="list-message">list-message</option><option value="list-event">list-event</option></select><button type="button" class="branch-delete" title="删除输出">×</button>';
     row.querySelector('.route-index').textContent = String(index + 1).padStart(2, '0');
     const keyField = row.querySelector('[data-output-key]');
     const typeField = row.querySelector('[data-output-type]');

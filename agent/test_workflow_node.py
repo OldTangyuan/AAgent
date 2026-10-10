@@ -227,7 +227,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
     def test_validator_and_parser_accept_history_node(self):
         workflow = {
             "input_ports": [],
-            "output_ports": [{"name": "events", "type": "event-list"}],
+            "output_ports": [{"name": "events", "type": "list-event"}],
             "nodes": [
                 {"id": "input", "type": "input", "workflowPorts": []},
                 {
@@ -239,14 +239,14 @@ class CallableWorkflowNodeTest(unittest.TestCase):
                     "id": "output",
                     "type": "output",
                     "workflowPorts": [
-                        {"id": "workflow:events", "name": "events", "type": "event-list"}
+                        {"id": "workflow:events", "name": "events", "type": "list-event"}
                     ],
                 },
             ],
             "connections": [
                 {"fromId": "input", "fromPortId": "control-out", "toId": "history", "toPortId": "control-in", "type": "control"},
                 {"fromId": "history", "fromPortId": "control-out", "toId": "output", "toPortId": "control-in", "type": "control"},
-                {"fromId": "history", "fromPortId": "events", "toId": "output", "toPortId": "workflow:events", "type": "event-list"},
+                {"fromId": "history", "fromPortId": "events", "toId": "output", "toPortId": "workflow:events", "type": "list-event"},
             ],
         }
 
@@ -278,7 +278,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
             ],
             "connections": [
                 {"fromId": "input", "fromPortId": "control-out", "toId": "history", "toPortId": "control-in", "type": "control"},
-                {"fromId": "history", "fromPortId": "events", "toId": "foreach", "toPortId": "list-in", "type": "event-list"},
+                {"fromId": "history", "fromPortId": "events", "toId": "foreach", "toPortId": "list-in", "type": "list-event"},
             ],
         }
 
@@ -1011,7 +1011,7 @@ class WorkflowExecutionTest(unittest.TestCase):
                 "id": "output",
                 "type": "output",
                 "workflowPorts": [
-                    {"id": "workflow:events", "name": "events", "type": "event-list"}
+                    {"id": "workflow:events", "name": "events", "type": "list-event"}
                 ],
                 "successors": {},
                 "data_inputs": {"workflow:events": [0, "events", None]},

@@ -9,7 +9,7 @@
 .connection-path.event { stroke:#147d78; stroke-dasharray:2 4; }
 .connection-path.list-content { stroke:var(--workflow-list-content); stroke-dasharray:7 3; }
 .connection-path.list-message { stroke:#7a3e88; stroke-dasharray:7 3; }
-.connection-path.event-list { stroke:#147d78; stroke-dasharray:7 3; }
+.connection-path.list-event { stroke:#147d78; stroke-dasharray:7 3; }
 .connection-path.preview { stroke-width:2.5; opacity:.7; }
 .node-layer { position:relative; z-index:2; min-width:1800px; width:max(100%,1800px); height:1200px; }
 .flow-node { position:absolute; width:190px; min-height:116px; padding:0; color:var(--ink); border:1px solid #cbd2cd; border-top:3px solid var(--ink); background:var(--surface); box-shadow:0 8px 18px rgba(28,42,36,.08); text-align:left; cursor:grab; touch-action:none; user-select:none; }
@@ -58,7 +58,7 @@
 .node-port[data-port-type="event"] { background:#147d78; }
 .node-port[data-port-type="list-content"] { background:var(--workflow-list-content); }
 .node-port[data-port-type="list-message"] { background:#7a3e88; }
-.node-port[data-port-type="event-list"] { background:#147d78; }
+.node-port[data-port-type="list-event"] { background:#147d78; }
 .canvas-legend { position:sticky; z-index:4; left:14px; bottom:14px; width:max-content; padding:7px 9px; display:flex; gap:12px; color:var(--muted); border:1px solid var(--line); background:rgba(255,255,255,.92); font:8px Consolas,monospace; }
 .canvas-legend span { display:flex; align-items:center; gap:5px; }
 .canvas-legend i { width:7px; height:7px; border-radius:50%; }
@@ -68,4 +68,4 @@
 .event-dot { background:#147d78; }
 .list-content-dot { background:var(--workflow-list-content); }
 .list-message-dot { background:#7a3e88; }
-.event-list-dot { background:#147d78; }
+.list-event-dot { background:#147d78; }

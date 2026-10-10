@@ -57,7 +57,7 @@ message
 event
 list-content
 list-message
-event-list
+list-event
 ```
 
 `outputs` 必须是非空数组。`key` 必须是非空字符串，区分大小写，不允许重复，也不允许使用同方向已有的 `control-out`。节点不保存 `dataInputPorts`，因为数据输入固定为 `content-in`。
@@ -133,7 +133,7 @@ event-list
 | `message` | 对象，且恰有 `role`、`content`；`role` 为允许值，`content` 为字符串 | Message 对象 |
 | `event` | 对象，`event_type` 为非空字符串且存在 `payload` | Event 对象，`payload` 子结构保持原样 |
 | `list-message` | 数组，且每项都是合法 Message | Message 对象列表 |
-| `event-list` | 数组，且每项都是合法 Event | Event 对象列表 |
+| `list-event` | 数组，且每项都是合法 Event | Event 对象列表 |
 
 首期不做宽松转换。例如字符串形式的 Message 不会再做第二次 JSON 解析，数字不会自动转成 Message，Message 的非字符串 `content` 也不会自动序列化。需要这类转换时，应先声明为 `content`，再显式连接后续节点处理。
 

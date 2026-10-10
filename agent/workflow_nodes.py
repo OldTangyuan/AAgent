@@ -234,7 +234,7 @@ def _deserialize_json_value(value: Any, value_type: str) -> Any:
         return value
     if value_type == "list-message" and isinstance(value, list) and all(_is_message(item) for item in value):
         return value
-    if value_type == "event-list" and isinstance(value, list) and all(_is_event(item) for item in value):
+    if value_type == "list-event" and isinstance(value, list) and all(_is_event(item) for item in value):
         return value
     raise ValueError(f"value does not match declared type {value_type}")
 

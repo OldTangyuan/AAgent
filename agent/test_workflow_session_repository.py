@@ -16,7 +16,7 @@ VALUES = {
     "event": {"event_type": "response", "payload": {"text": "hello"}},
     "list-content": ["hello"],
     "list-message": [{"role": "assistant", "content": "hello"}],
-    "event-list": [{"event_type": "response", "payload": {"text": "hello"}}],
+    "list-event": [{"event_type": "response", "payload": {"text": "hello"}}],
 }
 
 
@@ -58,7 +58,7 @@ class WorkflowSessionRepositoryTest(unittest.TestCase):
             read_session("ses_" + "a" * 32, "content")
         with self.assertRaisesRegex(WorkflowSessionError, "ID 输入无效"):
             read_session("ses_wrong", "content")
-        for value_type, value in [("content", 3), ("event", {}), ("message", {"role": "wrong", "content": "x"}), ("event-list", [{}])]:
+        for value_type, value in [("content", 3), ("event", {}), ("message", {"role": "wrong", "content": "x"}), ("list-event", [{}])]:
             with self.subTest(value_type=value_type, value=value), self.assertRaises(WorkflowSessionError):
                 create_session(value_type, value)
         with patch("workflow_session_repository._max_value_bytes", return_value=3):

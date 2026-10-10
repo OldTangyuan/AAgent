@@ -11,7 +11,7 @@ DATA_CONNECTION_TYPES = {
     "event",
     "list-content",
     "list-message",
-    "event-list",
+    "list-event",
 }
 SUPPORTED_NODE_TYPES = {
     "input",
@@ -84,7 +84,7 @@ def node_argument(node: dict[str, Any], name: str, default: Any = None) -> Any:
 
 
 def list_type_for_item(item_type: Any) -> str:
-    return "event-list" if item_type == "event" else f"list-{item_type}"
+    return f"list-{item_type}"
 
 
 def tool_parameter_names(node: dict[str, Any]) -> list[str]:
@@ -287,7 +287,7 @@ def is_valid_connection(
             expected_type = "content" if from_port in {"context-id", "session-id"} else node_argument(source_node, "value_type")
             if connection_type != expected_type:
                 return False
-        if source_node["type"] == "history" and (from_port != "events" or connection_type != "event-list"):
+        if source_node["type"] == "history" and (from_port != "events" or connection_type != "list-event"):
             return False
         if target_node["type"] == "split_event" and (to_port != "event-in" or connection_type != "event"):
             return False

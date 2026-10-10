@@ -19,7 +19,7 @@ MAX_WORKFLOW_METADATA_PORTS = 50
 MAX_WORKFLOW_NODE_REFERENCES = 50
 MAX_REMOTE_TOOL_REFERENCES = 100
 MAX_WORKFLOW_DESCRIPTION_LENGTH = 2000
-DATA_TYPES = {"content", "message", "event", "list-content", "list-message", "event-list"}
+DATA_TYPES = {"content", "message", "event", "list-content", "list-message", "list-event"}
 
 NODE_BASE_FIELDS = {"id", "type", "name", "x", "y", "arguments"}
 NODE_SHARED_FIELDS = {"workflowPorts", "dataInputPorts", "input_ports", "output_ports"}
@@ -57,7 +57,7 @@ def node_arguments(node: dict[str, Any]) -> dict[str, Any]:
 
 
 def list_type_for_item(item_type: Any) -> str:
-    return "event-list" if item_type == "event" else f"list-{item_type}"
+    return f"list-{item_type}"
 
 
 def tool_node_error(node: dict[str, Any], max_wait_ms: int, max_async_timeout_ms: int) -> str | None:
@@ -207,7 +207,7 @@ class WorkflowPortMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=80)
-    type: Literal["content", "message", "event", "list-content", "list-message", "event-list"]
+    type: Literal["content", "message", "event", "list-content", "list-message", "list-event"]
 
 
 class WorkflowRequest(BaseModel):
@@ -369,7 +369,7 @@ def filter_invalid_connections(
             if node_type == "remote_async_tool" and from_port == "task_id":
                 return "content"
             if node_type == "history" and from_port == "events":
-                return "event-list"
+                return "list-event"
             if node_type == "llm" and from_port == "reasoning" and node_arguments(source).get("think") is True:
                 return "content"
             if node_type == "llm" and from_port == "tool_calls" and node_arguments(source).get("tool_calls") is True:

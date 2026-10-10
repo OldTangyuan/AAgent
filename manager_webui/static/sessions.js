@@ -118,7 +118,7 @@ elements.createButton.addEventListener('click', () => {
 });
 elements.valueType.addEventListener('change', () => {
   elements.valueHint.textContent = elements.valueType.value === 'content' ? '文本' : 'JSON';
-  if (creating) elements.valueInput.value = elements.valueType.value === 'content' ? '' : elements.valueType.value.startsWith('list-') || elements.valueType.value === 'event-list' ? '[]' : '{}';
+  if (creating) elements.valueInput.value = elements.valueType.value === 'content' ? '' : elements.valueType.value.startsWith('list-') ? '[]' : '{}';
 });
 elements.cancelButton.addEventListener('click', () => {
   if (busy) return;

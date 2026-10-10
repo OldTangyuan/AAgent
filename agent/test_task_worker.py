@@ -50,15 +50,27 @@ class WorkerRoutingTest(unittest.TestCase):
         })
         self.assertEqual(event["payload"]["workflow_id"], "untrusted")
 
-    @patch("task_worker.read_bound_workflow_id")
+    @patch("task_worker.read_bound_workflow_id", return_value=None)
     @patch("task_worker.publish_to_queue")
     @patch("task_worker.record_history")
-    def test_internal_events_are_terminal(self, record_history, publish, read_bound):
+    def test_unbound_response_and_error_only_record_history(self, record_history, publish, read_bound):
         for event_type in ("response", "error"):
             task_worker.handle_task({"event_type": event_type, "payload": {}})
         self.assertEqual(record_history.call_count, 2)
-        read_bound.assert_not_called()
+        self.assertEqual([call.args[0] for call in read_bound.call_args_list], ["response", "error"])
         publish.assert_not_called()
+
+    @patch("task_worker.read_bound_workflow_id", return_value="self-workflow")
+    @patch("task_worker.publish_to_queue")
+    @patch("task_worker.record_history")
+    def test_bound_response_and_error_trigger_workflow(self, record_history, publish, read_bound):
+        for event_type in ("response", "error"):
+            task_worker.handle_task({"event_type": event_type, "payload": {"text": event_type}})
+        self.assertEqual([call.args[0] for call in read_bound.call_args_list], ["response", "error"])
+        self.assertEqual([call.args[1] for call in publish.call_args_list], [
+            {"event_type": "workflow", "payload": {"text": event_type, "workflow_id": "self-workflow"}}
+            for event_type in ("response", "error")
+        ])
 
     @patch("task_worker.MongoClient")
     def test_binding_lookup_failure_is_not_treated_as_unbound(self, mongo_client):

@@ -17,7 +17,7 @@ from pymongo.errors import PyMongoError
 
 MAX_VALUE_BYTES = 1024 * 1024
 SESSION_ID_PATTERN = re.compile(r"^ses_[0-9a-f]{32}$")
-SESSION_VALUE_TYPES = {"content", "message", "event", "list-content", "list-message", "event-list"}
+SESSION_VALUE_TYPES = {"content", "message", "event", "list-content", "list-message", "list-event"}
 
 
 def valid_value(value_type: str, value: Any) -> bool:
@@ -37,7 +37,7 @@ def valid_value(value_type: str, value: Any) -> bool:
         return isinstance(value, list) and all(isinstance(item, str) for item in value)
     if value_type == "list-message":
         return isinstance(value, list) and all(message(item) for item in value)
-    if value_type == "event-list":
+    if value_type == "list-event":
         return isinstance(value, list) and all(event(item) for item in value)
     return False
 

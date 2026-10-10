@@ -19,7 +19,7 @@ CONTEXT_VALUE_TYPES = {
     "event",
     "list-content",
     "list-message",
-    "event-list",
+    "list-event",
 }
 
 
