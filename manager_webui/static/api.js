@@ -22,6 +22,34 @@ export function fetchDocuments() {
   return request('/api/documents');
 }
 
+export function fetchSessions(cursor = '', query = '') {
+  const params = new URLSearchParams({ limit: '50', q: query });
+  if (cursor) params.set('cursor', cursor);
+  return request(`/api/sessions?${params}`);
+}
+
+export function fetchSession(sessionId) {
+  return request(`/api/sessions/${encodeURIComponent(sessionId)}`);
+}
+
+export function createSession(valueType, value) {
+  return request('/api/sessions', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value_type: valueType, value }),
+  });
+}
+
+export function updateSession(sessionId, valueType, value, updatedAt) {
+  return request(`/api/sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value_type: valueType, value, updated_at: updatedAt }),
+  });
+}
+
+export function deleteSession(sessionId) {
+  return request(`/api/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+}
+
 export function fetchDocument(documentId) {
   return request(`/api/documents/${encodeURIComponent(documentId)}`);
 }

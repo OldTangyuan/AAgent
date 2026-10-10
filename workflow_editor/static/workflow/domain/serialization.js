@@ -31,6 +31,9 @@ const NODE_ARGUMENT_FIELDS_BY_TYPE = {
   context_create: new Set(['value_type']),
   context_read: new Set(['value_type']),
   context_write: new Set(['value_type']),
+  session_create: new Set(['value_type']),
+  session_read: new Set(['value_type']),
+  session_write: new Set(['value_type']),
   workflow: new Set(['workflow_name']),
 };
 const NODE_ARGUMENT_FIELDS = new Set(Object.values(NODE_ARGUMENT_FIELDS_BY_TYPE).flatMap((fields) => [...fields]));
@@ -240,7 +243,7 @@ function normalizeNode(node, inputPorts, outputPorts, callableWorkflows, remoteT
     if (!normalized.event_types.length) return null;
     normalized.limit = Number.isInteger(node.limit) ? Math.min(1000, Math.max(1, node.limit)) : 10;
   }
-  if (['context_create', 'context_read', 'context_write'].includes(node.type)) {
+  if (['context_create', 'context_read', 'context_write', 'session_create', 'session_read', 'session_write'].includes(node.type)) {
     if (!['content', 'message', 'event', 'list-content', 'list-message', 'event-list'].includes(node.value_type)) return null;
     normalized.value_type = node.value_type;
   }

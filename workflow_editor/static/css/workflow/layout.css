@@ -52,6 +52,9 @@ button.library-item:hover { border-color:var(--green); border-left-color:var(--g
 .context_create-symbol { background:#326b4b; }
 .context_read-symbol { background:#376c78; }
 .context_write-symbol { background:#8a5b2d; }
+.session_create-symbol { background:#187b70; }
+.session_read-symbol { background:#28749c; }
+.session_write-symbol { background:#ab6740; }
 .workflow-node-library { padding-top:8px; display:grid; gap:8px; border-top:1px solid var(--line); }
 .workflow-node-library[hidden] { display:none; }
 .workflow-symbol { background:#785d9b; }

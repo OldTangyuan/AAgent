@@ -288,7 +288,7 @@ def _validate_node(node: Any, index: int) -> None:
             raise WorkflowValidationError(
                 "foreach node item_type must be 'content', 'message', or 'event'"
             )
-    elif node_type in {"context_create", "context_read", "context_write"}:
+    elif node_type in {"context_create", "context_read", "context_write", "session_create", "session_read", "session_write"}:
         if node_argument(node, "value_type") not in DATA_CONNECTION_TYPES:
             raise WorkflowValidationError(
                 "context node value_type must be a supported data type"

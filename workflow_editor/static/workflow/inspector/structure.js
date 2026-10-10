@@ -11,7 +11,7 @@ export function bindStructureInspector(node, context) {
   if (node.type === 'list_append') bindListAppend(node, context);
   if (node.type === 'foreach') bindForeach(node, context);
   if (node.type === 'history') bindHistory(node, context);
-  if (['context_create', 'context_read', 'context_write'].includes(node.type)) bindContext(node, context);
+  if (['context_create', 'context_read', 'context_write', 'session_create', 'session_read', 'session_write'].includes(node.type)) bindContext(node, context);
 }
 
 function commitStructureChange(node, context, renderInspector = true) {

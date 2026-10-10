@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>AAgent Sessions</title>
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/sessions.css?v=3">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="AAgent 管理"><span class="brand-mark" aria-hidden="true">A</span><span class="brand-name"><strong>AAgent</strong><small>SESSIONS</small></span></a>
+    <nav class="page-nav" aria-label="页面导航">
+      <a href="/workflows.html">Workflows</a><a href="/events.html">事件</a><a class="active" href="/sessions.html" aria-current="page">Sessions</a><a href="/document.html">文档</a><a href="/model.html">模型</a>
+    </nav>
+  </header>
+  <main>
+    <div class="workspace">
+      <aside class="sidebar" aria-label="Session 列表">
+        <header class="sidebar-head"><div><small>GLOBAL STATE</small><h1>Sessions</h1></div><button id="createButton" class="icon-action" type="button" title="新建 Session" aria-label="新建 Session">+</button></header>
+        <div class="search-row"><label for="searchInput" class="sr-only">搜索 Session ID 前缀</label><input id="searchInput" type="search" placeholder="搜索 Session ID 前缀" autocomplete="off"><button id="searchButton" type="button">搜索</button></div>
+        <div id="sessionList" class="session-list" aria-live="polite"></div>
+        <footer class="list-footer"><span id="listStatus" role="status"></span><button id="moreButton" type="button" hidden>加载更多</button></footer>
+      </aside>
+      <section class="detail" aria-label="Session 详情">
+        <header class="detail-head"><div><small>SESSION RECORD</small><h2 id="detailTitle">选择 Session</h2><span id="timestamp"></span></div><div class="detail-actions"><button id="copyButton" type="button" title="复制 Session ID" disabled>复制 ID</button><button id="refreshButton" type="button" title="刷新 Session" disabled>刷新</button><button id="deleteButton" type="button" class="danger" disabled>删除</button></div></header>
+        <form id="sessionForm" class="form" hidden>
+          <label>值类型<select id="valueType"><option value="content">content</option><option value="message">message</option><option value="event">event</option><option value="list-content">list-content</option><option value="list-message">list-message</option><option value="event-list">event-list</option></select></label>
+          <label class="value-label">值 <span id="valueHint">文本</span><textarea id="valueInput" spellcheck="false"></textarea></label>
+          <footer><span id="formStatus" role="status"></span><button id="cancelButton" type="button">取消</button><button class="primary" type="submit">保存</button></footer>
+        </form>
+        <div id="emptyDetail" class="empty-detail">选择左侧 Session 或新建记录</div>
+      </section>
+    </div>
+  </main>
+  <script type="module" src="/sessions.js?v=2"></script>
+</body>
+</html>

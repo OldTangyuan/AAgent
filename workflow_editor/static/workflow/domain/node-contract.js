@@ -20,6 +20,9 @@ export const NODE_TYPES = new Set([
   'context_create',
   'context_read',
   'context_write',
+  'session_create',
+  'session_read',
+  'session_write',
   'workflow',
 ]);
 
@@ -150,29 +153,38 @@ export function portsForNode(node) {
       { id: 'events', direction: 'output', type: 'event-list', label: '事件', title: '最近的事件列表', multiple: true },
     ];
   }
-  if (node.type === 'context_create') {
+  if (node.type === 'context_create' || node.type === 'session_create') {
+    const isSession = node.type === 'session_create';
+    const idPort = isSession ? 'session-id' : 'context-id';
+    const label = isSession ? 'Session' : 'Context';
     return [
-      { id: 'control-in', direction: 'input', type: 'control', label: '触发', title: '创建 Workflow Context', multiple: false },
+      { id: 'control-in', direction: 'input', type: 'control', label: '触发', title: `创建 ${label}`, multiple: false },
       { id: 'initial-value', direction: 'input', type: node.value_type, label: '初始值', title: node.value_type, multiple: false },
       { id: 'control-out', direction: 'output', type: 'control', label: '下一步', title: '下一步', multiple: false },
-      { id: 'context-id', direction: 'output', type: 'content', label: 'Context ID', title: 'Workflow Context ID', multiple: true },
+      { id: idPort, direction: 'output', type: 'content', label: `${label} ID`, title: `${label} ID`, multiple: true },
     ];
   }
-  if (node.type === 'context_read') {
+  if (node.type === 'context_read' || node.type === 'session_read') {
+    const isSession = node.type === 'session_read';
+    const idPort = isSession ? 'session-id' : 'context-id';
+    const label = isSession ? 'Session' : 'Context';
     return [
-      { id: 'control-in', direction: 'input', type: 'control', label: '触发', title: '读取 Workflow Context', multiple: false },
-      { id: 'context-id', direction: 'input', type: 'content', label: 'Context ID', title: 'Workflow Context ID', multiple: false },
+      { id: 'control-in', direction: 'input', type: 'control', label: '触发', title: `读取 ${label}`, multiple: false },
+      { id: idPort, direction: 'input', type: 'content', label: `${label} ID`, title: `${label} ID`, multiple: false },
       { id: 'control-out', direction: 'output', type: 'control', label: '下一步', title: '下一步', multiple: false },
       { id: 'value-out', direction: 'output', type: node.value_type, label: '值', title: node.value_type, multiple: true },
     ];
   }
-  if (node.type === 'context_write') {
+  if (node.type === 'context_write' || node.type === 'session_write') {
+    const isSession = node.type === 'session_write';
+    const idPort = isSession ? 'session-id' : 'context-id';
+    const label = isSession ? 'Session' : 'Context';
     return [
-      { id: 'control-in', direction: 'input', type: 'control', label: '触发', title: '修改 Workflow Context', multiple: false },
-      { id: 'context-id', direction: 'input', type: 'content', label: 'Context ID', title: 'Workflow Context ID', multiple: false },
+      { id: 'control-in', direction: 'input', type: 'control', label: '触发', title: `修改 ${label}`, multiple: false },
+      { id: idPort, direction: 'input', type: 'content', label: `${label} ID`, title: `${label} ID`, multiple: false },
       { id: 'value-in', direction: 'input', type: node.value_type, label: '新值', title: node.value_type, multiple: false },
       { id: 'control-out', direction: 'output', type: 'control', label: '下一步', title: '下一步', multiple: false },
-      { id: 'context-id', direction: 'output', type: 'content', label: 'Context ID', title: 'Workflow Context ID', multiple: true },
+      { id: idPort, direction: 'output', type: 'content', label: `${label} ID`, title: `${label} ID`, multiple: true },
       { id: 'value-out', direction: 'output', type: node.value_type, label: '新值', title: node.value_type, multiple: true },
     ];
   }
@@ -253,6 +265,9 @@ export function createNode(type, nodes, configuration = null) {
   if (type === 'context_create') return { id: createWorkflowId('context-create'), type, name: `创建 Context ${number}`, value_type: 'content', ...position };
   if (type === 'context_read') return { id: createWorkflowId('context-read'), type, name: `读取 Context ${number}`, value_type: 'content', ...position };
   if (type === 'context_write') return { id: createWorkflowId('context-write'), type, name: `修改 Context ${number}`, value_type: 'content', ...position };
+  if (type === 'session_create') return { id: createWorkflowId('session-create'), type, name: `创建 Session ${number}`, value_type: 'content', ...position };
+  if (type === 'session_read') return { id: createWorkflowId('session-read'), type, name: `读取 Session ${number}`, value_type: 'content', ...position };
+  if (type === 'session_write') return { id: createWorkflowId('session-write'), type, name: `修改 Session ${number}`, value_type: 'content', ...position };
   if (type === 'llm') return { id: createWorkflowId('llm'), type, name: `LLM ${number}`, model: '', tools: [], think: false, tool_calls: false, ...position };
   if (type === 'local_tool') return { id: createWorkflowId('local-tool'), type, name: `Local Tool ${number}`, tool: '', parameters: [], ...position };
   if (type === 'remote_sync_tool') return { id: createWorkflowId('remote-sync-tool'), type, name: `Remote Sync Tool ${number}`, tool: '', parameters: [], outputs: [], timeout_ms: 10000, ...position };

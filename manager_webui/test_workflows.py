@@ -4,6 +4,28 @@ from workflows import filter_invalid_connections, node_format_error
 
 
 class WorkflowConnectionFilterTest(unittest.TestCase):
+    def test_preserves_session_id_and_value_connections(self):
+        nodes = [
+            {"id": "input", "type": "input", "workflowPorts": [{"id": "workflow:value", "name": "value", "type": "content"}]},
+            {"id": "create", "type": "session_create", "arguments": {"value_type": "content"}},
+            {"id": "write", "type": "session_write", "arguments": {"value_type": "content"}},
+            {"id": "read", "type": "session_read", "arguments": {"value_type": "content"}},
+            {"id": "output", "type": "output", "workflowPorts": [{"id": "workflow:result", "name": "result", "type": "content"}]},
+        ]
+        connections = [
+            {"fromId": "input", "fromPortId": "workflow:value", "toId": "create", "toPortId": "initial-value", "type": "content"},
+            {"fromId": "create", "fromPortId": "session-id", "toId": "write", "toPortId": "session-id", "type": "content"},
+            {"fromId": "input", "fromPortId": "workflow:value", "toId": "write", "toPortId": "value-in", "type": "content"},
+            {"fromId": "write", "fromPortId": "session-id", "toId": "read", "toPortId": "session-id", "type": "content"},
+            {"fromId": "read", "fromPortId": "value-out", "toId": "output", "toPortId": "workflow:result", "type": "content"},
+        ]
+
+        _, filtered = filter_invalid_connections(
+            nodes, connections, [{"name": "value", "type": "content"}], [{"name": "result", "type": "content"}],
+        )
+
+        self.assertEqual(filtered, connections)
+
     def test_preserves_content_map_connections(self):
         nodes = [
             {

@@ -43,6 +43,9 @@ NODE_ARGUMENT_FIELDS_BY_TYPE = {
     "context_create": {"value_type"},
     "context_read": {"value_type"},
     "context_write": {"value_type"},
+    "session_create": {"value_type"},
+    "session_read": {"value_type"},
+    "session_write": {"value_type"},
     "workflow": {"workflow_name"},
 }
 NODE_ARGUMENT_FIELDS = set().union(*NODE_ARGUMENT_FIELDS_BY_TYPE.values())
@@ -194,7 +197,7 @@ def node_format_error(node: dict[str, Any], index: int) -> str | None:
         keys = [item["key"] for item in mappings]
         if len(keys) != len(set(keys)):
             return f"nodes[{index}].arguments.mappings 的 key 不能重复"
-    if node_type in {"context_create", "context_read", "context_write"}:
+    if node_type in {"context_create", "context_read", "context_write", "session_create", "session_read", "session_write"}:
         if arguments.get("value_type") not in DATA_TYPES:
             return f"nodes[{index}].arguments.value_type 必须是受支持的数据类型"
     return None
@@ -377,10 +380,10 @@ def filter_invalid_connections(
                 return list_type_for_item(node_arguments(source).get("item_type"))
             if node_type == "foreach" and from_port == "item-out":
                 return node_arguments(source).get("item_type")
-            if node_type == "context_create" and from_port == "context-id":
+            if node_type in {"context_create", "session_create"} and from_port == ("context-id" if node_type == "context_create" else "session-id"):
                 return "content"
-            if node_type in {"context_read", "context_write"}:
-                if from_port == "context-id":
+            if node_type in {"context_read", "context_write", "session_read", "session_write"}:
+                if from_port == ("context-id" if node_type.startswith("context_") else "session-id"):
                     return "content"
                 if from_port == "value-out":
                     return node_arguments(source).get("value_type")
@@ -427,12 +430,12 @@ def filter_invalid_connections(
                     return item_type
             if node_type == "foreach" and to_port == "list-in":
                 return list_type_for_item(node_arguments(target).get("item_type"))
-            if node_type == "context_create" and to_port == "initial-value":
+            if node_type in {"context_create", "session_create"} and to_port == "initial-value":
                 return node_arguments(target).get("value_type")
-            if node_type == "context_read" and to_port == "context-id":
+            if node_type in {"context_read", "session_read"} and to_port == ("context-id" if node_type == "context_read" else "session-id"):
                 return "content"
-            if node_type == "context_write":
-                if to_port == "context-id":
+            if node_type in {"context_write", "session_write"}:
+                if to_port == ("context-id" if node_type == "context_write" else "session-id"):
                     return "content"
                 if to_port == "value-in":
                     return node_arguments(target).get("value_type")

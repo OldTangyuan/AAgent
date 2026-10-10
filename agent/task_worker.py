@@ -23,7 +23,7 @@ TARGET_USER_ID = os.environ["QQ_TARGET_USER_ID"]
 BOT_ID = os.environ["QQ_BOT_ID"]
 
 
-def read_active_workflow_id() -> str:
+def read_active_workflow_id(event_type: str | None = None) -> str:
     mongo_kwargs = {
         "host": os.getenv("MONGO_HOST", "mongodb"),
         "port": int(os.getenv("MONGO_PORT", "27017")),
@@ -37,9 +37,16 @@ def read_active_workflow_id() -> str:
         )
     try:
         with MongoClient(**mongo_kwargs) as client:
-            setting = client[os.getenv("MONGO_DATABASE", "agent")][
-                os.getenv("MONGO_SETTINGS_COLLECTION", "settings")
-            ].find_one({"_id": "agent"}, {"workflow_id": 1})
+            database = client[os.getenv("MONGO_DATABASE", "agent")]
+            if event_type:
+                binding = database[os.getenv("MONGO_EVENT_BINDING_COLLECTION", "event_bindings")].find_one(
+                    {"event_type": event_type, "enabled": True}, {"workflow_id": 1}
+                )
+                if binding is not None:
+                    return str(binding["workflow_id"])
+            setting = database[os.getenv("MONGO_SETTINGS_COLLECTION", "settings")].find_one(
+                {"_id": "agent"}, {"workflow_id": 1}
+            )
     except PyMongoError as error:
         raise RuntimeError("failed to read active workflow setting") from error
     workflow_id = setting.get("workflow_id") if setting else None
@@ -86,7 +93,7 @@ def handle_task(e: dict):
         del e
 
     def workflow(e):
-        active_workflow_id = read_active_workflow_id()
+        active_workflow_id = read_active_workflow_id(e['payload'].get('source'))
         workflow_document = _read_workflow(active_workflow_id, by_id=True)
         validate_workflow(workflow_document)
         workflow_map = parse_workflow(workflow_document)

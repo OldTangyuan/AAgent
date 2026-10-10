@@ -466,6 +466,38 @@ def workflow_context_write(current_id: int, workflow_map: WorkflowMap) -> int:
     return next_successor(node)
 
 
+def workflow_session_create(current_id: int, workflow_map: WorkflowMap) -> int:
+    from workflow_session_repository import create_session
+
+    node = workflow_map[current_id]
+    value = _context_input(node, "initial-value", "Session Value 输入缺失")
+    session_id = create_session(node_argument(node, "value_type"), value)["id"]
+    propagate_workflow_output(workflow_map, node, "session-id", session_id)
+    return next_successor(node)
+
+
+def workflow_session_read(current_id: int, workflow_map: WorkflowMap) -> int:
+    from workflow_session_repository import read_session
+
+    node = workflow_map[current_id]
+    session_id = _context_input(node, "session-id", "Session ID 输入无效")
+    value = read_session(session_id, node_argument(node, "value_type"))
+    propagate_workflow_output(workflow_map, node, "value-out", value)
+    return next_successor(node)
+
+
+def workflow_session_write(current_id: int, workflow_map: WorkflowMap) -> int:
+    from workflow_session_repository import write_session
+
+    node = workflow_map[current_id]
+    session_id = _context_input(node, "session-id", "Session ID 输入无效")
+    value = _context_input(node, "value-in", "Session Value 输入缺失")
+    write_session(session_id, node_argument(node, "value_type"), value)
+    propagate_workflow_output(workflow_map, node, "session-id", session_id)
+    propagate_workflow_output(workflow_map, node, "value-out", value)
+    return next_successor(node)
+
+
 def workflow_workflow(current_id: int, workflow_map: WorkflowMap) -> int:
     from workflow_parser import _read_workflow, parse_workflow
     from workflow_validator import validate_workflow
@@ -537,5 +569,8 @@ nodes_map: dict[str, NodeHandler] = {
     "context_create": workflow_context_create,
     "context_read": workflow_context_read,
     "context_write": workflow_context_write,
+    "session_create": workflow_session_create,
+    "session_read": workflow_session_read,
+    "session_write": workflow_session_write,
     "workflow": workflow_workflow,
 }
