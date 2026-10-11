@@ -1,5 +1,10 @@
 # 23 Workflow Session 节点与管理页设计
 
+> 类型:设计文档。
+> 性质:现行文档。
+> 归属:`agent/` + `manager_webui/`。
+> 适用版本:平台 `0.1.0+`。
+
 ## 1. 目标与边界
 
 Session 是跨 Workflow、跨执行实例共享的带类型可变值。它不绑定 `invocation_id`，不设置 TTL，也不在 `run_workflow_map` 的 `finally` 中清理；只有管理页主动删除时才消失。重启 Agent / Manager 后仍应可读。它与 [Workflow Context](21-Workflow%20Context节点设计.md) 并存，不改变现有 Context 的执行实例隔离、TTL 和自动清理语义。

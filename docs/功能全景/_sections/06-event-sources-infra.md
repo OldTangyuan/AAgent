@@ -1,5 +1,10 @@
 # 06 事件源适配器与基础设施
 
+> 类型:审计报告（分节草稿）。
+> 性质:现行文档。
+> 归属:`qqbot/` + `qqbot_consumer/` + `基础设施`。
+> 适用版本:平台 `0.1.0+`。
+
 > 审计范围：`qqbot/`、`qqbot_consumer/`、根目录 compose / `.env` 模板 / git 配置、全部 8 个 `Dockerfile` 与 `requirements.txt`。
 > 交叉印证：`docs/20-Event协议与流转.md`、`docs/24-Event绑定与Workflow路由设计.md`（只读）。
 > 原则：**以源码为准**。凡文档与代码冲突，本节记录代码事实并登记到「已知缺陷与不一致」。

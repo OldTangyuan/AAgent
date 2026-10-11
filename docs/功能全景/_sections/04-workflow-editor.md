@@ -1,5 +1,10 @@
 # 04 Workflow 编辑器（workflow_editor，:8082）
 
+> 类型:审计报告（分节草稿）。
+> 性质:现行文档。
+> 归属:`workflow_editor/`。
+> 适用版本:平台 `0.1.0+`。
+
 > 范围：`workflow_editor/` 全量源码（后端 1 份、HTML 1 份、JS 9 份、CSS 4 份），交叉核对 `agent/workflow_contract.py`、`agent/workflow_validator.py`、`manager_webui/static/workflow_canvas.mjs`。全部结论均带 `文件:行号`。
 > 一句话定位：这是一个**纯前端、零持久化的 Workflow 画布编辑器**——后端只提供 3 个只读资源接口与静态文件服务，所有编辑（节点/连线/元数据）只存在于浏览器内存，产出物是导出的 JSON 文件或剪贴板文本。
 

@@ -1,5 +1,10 @@
 # 19 Workflow 本地、远程同步与远程异步 Tool 节点拆分
 
+> 类型:设计文档。
+> 性质:现行文档。
+> 归属:`agent/` + `workflow_editor/` + `manager_webui/` + `tool_server/`。
+> 适用版本:平台 `0.1.0+`。
+
 ## 1. 目标
 
 将现有 `tool` 节点拆分为三种执行和控制流语义明确的节点：

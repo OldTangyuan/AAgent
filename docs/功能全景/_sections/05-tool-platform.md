@@ -1,5 +1,10 @@
 # 05 工具平台（tool_server + tool_provider）
 
+> 类型:审计报告（分节草稿）。
+> 性质:现行文档。
+> 归属:`tool_server/` + `tool_provider/`。
+> 适用版本:平台 `0.1.0+`。
+
 本节的结论全部来自 `tool_server/` 与 `tool_provider/` 的源码逐行审计，并与 `docs/17-Tool Server设计.md`、`docs/18-Tool Server内核实现.md`、`docs/19-Workflow本地与远程Tool节点拆分.md` 交叉印证。凡是设计文档声称而代码未实现的，均在 `## 5.11 与设计文档的差异对照` 中逐条列出。
 
 ## 5.1 定位、进程边界与部署事实

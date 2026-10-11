@@ -1,0 +1,8 @@
+{
+  "platform": "0.1.0",
+  "protocol": {
+    "event": "1.0",
+    "workflow": "1.0"
+  },
+  "services": {}
+}

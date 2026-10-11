@@ -3,6 +3,8 @@
 > 日期:2026-08-16。
 > 类型:修复记录。
 > 性质:历史快照(记录本次审查触发的缺陷修复过程,当前行为以源码为准)。
+> 归属:`webui_py/`。
+> 适用版本:—。
 > 范围:`webui_py/static/workflow/connections.js`、`webui_py/static/workflow/view.js`、`docs/11-Workflow设计规范.md`。
 > 说明:按审计流程对 Workflow 前端编辑器做独立静态审查,审查中发现并修复 1 项 P1(输出端新建连接反向存储)、1 项 P2(分支删除过滤条件过宽)与 2 处文档语义不一致;完整结论见 [审查报告](../审查日志/2026-08-16-webui-workflow连接交互-审查报告.md)。
 

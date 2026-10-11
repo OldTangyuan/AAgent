@@ -1,5 +1,10 @@
 # 26 Workflow `map-content` 数据类型设计
 
+> 类型:设计文档。
+> 性质:现行文档。
+> 归属:跨服务（`agent/` + `workflow_editor/` + `manager_webui/`）。
+> 适用版本:平台 `0.1.0+`。
+
 ## 1. 目标与边界
 
 现有 `content_map` 节点把面板中配置的 `mappings: [{key, value}]` 用作静态查表：输入 `content-in`，输出匹配的 `content-out`。这份映射不能作为数据传给其他节点，也不能保存到 Context / Session 或作为 Workflow 的输入输出。

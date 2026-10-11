@@ -3,6 +3,8 @@
 > 日期:2026-09-12。
 > 类型:审查报告。
 > 性质:历史快照。
+> 归属:跨服务。
+> 适用版本:—。
 > 范围:提交 `bf6e225`(workflow管理页ui优化)相对 `201e9e4` 的改动,即 `webui_py/static/workflows.html`、`webui_py/static/workflows.js`、`webui_py/static/css/workflows.css`;同时交叉核对 `webui_py/workflows.py` 的元数据契约与 `docs/11-Workflow设计规范.md` §4.5。
 > 说明:管理页由"可编辑数据端口与可调用 Workflow"改为"只读展示 + 上传写入";本次为纯静态审查,未修改任何代码,验证边界见第 4 节。
 > 待办:本文件已归档;条目在当前源码下的存活情况见[核验报告](../核验报告.md)。

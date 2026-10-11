@@ -1,5 +1,11 @@
 # 20 Event 协议与流转
 
+> 类型:设计文档。
+> 性质:现行文档。
+> 归属:跨服务。
+> 适用版本:平台 `0.1.0+`。
+> 协议版本:event 1.0。
+
 本文描述当前 **Workflow + Tool Server** 架构中的 Event。主队列 Event 负责按绑定把外部输入送入 Workflow，并记录 Workflow 的最终输出或目标不存在的错误：
 
 ```text

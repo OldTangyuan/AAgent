@@ -1,5 +1,10 @@
 # 22 Workflow 反序列化 JSON 节点设计
 
+> 类型:设计文档。
+> 性质:现行文档。
+> 归属:`agent/` + `workflow_editor/` + `manager_webui/`。
+> 适用版本:平台 `0.1.0+`。
+
 ## 1. 目标
 
 Workflow 中的 `content` 经常承载一整个 JSON 文本。当前节点可以传递或拼接这段文本，但不能按字段拆成多个有类型的输出，使用者只能为每种响应结构编写专用 Tool。

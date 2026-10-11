@@ -3,6 +3,8 @@
 > 日期:2026-08-16。
 > 类型:审计报告。
 > 性质:历史快照。
+> 归属:跨服务。
+> 适用版本:—。
 > 范围:`webui_py/static/workflow.js`、`webui_py/static/workflow/{model,view,connections}.js`、`webui_py/static/workflow.html`、`webui_py/static/css/workflow/{layout,canvas,inspector}.css`、`docs/11-Workflow设计规范.md` 的 Workflow 前端编辑器。
 > 说明:对 Workflow 前端编辑器做独立静态审查(正确性/扩展性/优雅性三维度);审查中发现并修复 1 项 P1(输出端新建连接反向存储)、1 项 P2(分支删除过滤条件过宽)与 2 处文档语义不一致;未做浏览器实测,验证边界见第 4 节。
 

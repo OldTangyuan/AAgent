@@ -1,5 +1,10 @@
 # 21 Workflow Context 节点设计
 
+> 类型:设计文档。
+> 性质:现行文档。
+> 归属:`agent/` + `workflow_editor/` + `manager_webui/`。
+> 适用版本:平台 `0.1.0+`。
+
 ## 1. 目标
 
 当前 Workflow 使用 pipeline 模型：数据沿连接从上游节点写入下游节点，控制流决定节点执行顺序。`foreach` 可以通过 `loop-out` 和 `loop-in` 重复执行循环体，但循环体没有独立的可变状态空间，因此无法完成以下操作：

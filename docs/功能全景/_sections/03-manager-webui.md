@@ -1,5 +1,10 @@
 # 03 管理 WebUI（manager_webui，:8084）
 
+> 类型:审计报告（分节草稿）。
+> 性质:现行文档。
+> 归属:`manager_webui/`。
+> 适用版本:平台 `0.1.0+`。
+
 `manager_webui/` 是一个 FastAPI 单进程服务（`docker-compose.yml:96-129`，`uvicorn main:app --port 8084`），同时承担三类职责：
 
 1. **管理 API 后端**：Workflow 元数据/画布、文档、模型注册表、Session 存储、事件目录、健康检查（`manager_webui/main.py:145-159`）。

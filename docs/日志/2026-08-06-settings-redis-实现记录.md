@@ -3,6 +3,8 @@
 > 日期:2026-08-06。
 > 类型:实现记录。
 > 性质:历史快照(记录本次功能实现与缺陷修复过程,当前行为以源码为准)。
+> 归属:`webui_py/` + `agent/`。
+> 适用版本:—。
 > 范围:`agent/queue_client.py`、`agent/task_worker.py`、`agent/settings.json`、`agent/prompt/system.txt`(删除)、`webui_py/main.py`、`docker-compose.yml`。
 > 说明:System Prompt 持久化从 `prompt/system.txt` → `settings.json` → 最终落为 Redis 单键 JSON 设置对象(`aagent:settings`,可配 `AGENT_SETTINGS_KEY`);`settings.json` 仅作首次启动默认种子。
 

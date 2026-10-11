@@ -3,6 +3,8 @@
 > 日期:2026-08-06。
 > 类型:审计报告。
 > 性质:历史快照。
+> 归属:跨服务。
+> 适用版本:—。
 > 范围:`agent/queue_client.py`、`agent/task_worker.py`、`agent/settings.json`、`agent/prompt/system.txt`(删除)、`webui_py/main.py`、`docker-compose.yml` 及 02/03/04/06/前端API格式 文档。
 > 说明:System Prompt 持久化从 `prompt/system.txt` 迁到 `settings.json` 再落为 Redis 单键 JSON 设置对象(`aagent:settings`)的静态审查;审查中发现并修复 1 项 P3(初始化与 GET 未校验 `system_prompt` 字段),修复证据见第 3 节;未做真实 Redis/容器实测,验证边界见第 4 节。
 > 待办:本文件已归档;条目在当前源码下的存活情况见[核验报告](../核验报告.md)。

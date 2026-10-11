@@ -1,5 +1,10 @@
 # B 组后端核验（历史审查日志条目 → 当前源码取证）
 
+> 类型:核验记录。
+> 性质:现行文档。
+> 归属:`manager_webui/` + `webui_py/` + `workflow_editor/`。
+> 适用版本:平台 `0.1.0+`。
+
 > 判定时间：本次会话；判定依据：仅当前源码（`read`/`glob`/`grep`），不引用历史报告描述、不引用旧行号。
 > 当前实际存在的 HTTP 服务只有 4 个：`webui_py`(8081)、`manager_webui`(8084)、`workflow_editor`(8082)、`tool_server`(8083)。
 > 已消失对象：`webui_py/workflows.py`、`webui_py/models.py`、`webui_py/documents.py`、`webui_py/subagents.py`、`webui_py/settings.py`（`webui_py/` 现仅 `main.py`/`common.py`/`events.py`/`event_bindings.py` + static）。
