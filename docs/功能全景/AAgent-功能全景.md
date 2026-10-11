@@ -3076,7 +3076,7 @@ outputSchema 无 properties → 退化为单端口 {name:'result', type:...}
 | 反向心跳 | Server 从不主动 ping；协议允许 Server 发 `ping`，Provider 回 `pong`（`runtime.py:163-164`），但服务端无任何发起方 | `runtime.py:163-164` |
 | 在线判定 | **没有超时判定**。在线 == 注册表内有该连接对象；只靠 TCP 断开触发 `finally` 注销 | `main.py:323-326` |
 | 无响应连接的后果 | 半开连接（对端假死不 close）不会被清退，工具继续显示在线，任务可被派发进队列后永无结果，直到任务 TTL（默认 86400s） | `provider_registry.py:66-76`、`task_store.py:143-155` |
-| 连接异常 | `(WebSocketDisconnect, asyncio.TimeoutError)` 静默；`(PydanticValidationError, SchemaError, ValueError)` → `close(1008, reason=str(error)[:120])`；`jsonschema.ValidationError` **不在捕获列表**（见缺陷 D1） | `main.py:319-322` |
+| 连接异常 | `(WebSocketDisconnect, asyncio.TimeoutError)` 静默；`(PydanticValidationError, SchemaError, ValueError)` → `close(1008, reason=str(error)[:120])`。**出参 `jsonschema.ValidationError` 不在该列表**，但它现在已在 `handle_provider_event` 内部（`main.py:118-126`）被就地捕获并转成该任务的 `failed` 终态，**不会到达这里**（见缺陷 ~~D1~~，已修复） | `main.py:327-330`、`:118-126` |
 
 ### 5.4.3 任务下发消息
 
@@ -3495,6 +3495,8 @@ Workflow 端口类型靠 `x-workflow-port-type`（JSON Schema 扩展关键字，
 
 ## 已知缺陷与占位代码
 
+> **修复状态**：**D1**（出参 `jsonschema.ValidationError` 打断 Provider 连接，=`2026-10-11` 报告 A3）**已修复**；D2–D20 仍成立。D4（入参/协议级畸形消息关整条连接）与 D1 同源但路径不同，**未修**。
+
 ### 占位/死代码扫描结果
 
 | 模式 | 命中 | 判定 |
@@ -3514,10 +3516,10 @@ Workflow 端口类型靠 `x-workflow-port-type`（JSON Schema 扩展关键字，
 
 | ID | 级别 | 缺陷 | 位置 | 影响 |
 | --- | --- | --- | --- | --- |
-| D1 | 中（已登记 A3） | Provider 输出不符合 `outputSchema` 时 `jsonschema.ValidationError` **不是** `ValueError` 子类，逃出 `except (PydanticValidationError, SchemaError, ValueError)`，异常穿透 `finally` 并把该 Provider 的 WebSocket 整条打断 | `main.py:118`、`main.py:319-322` | Provider 掉线；在飞任务停在 `working` 直到 TTL；同步调用方等到自身超时才拿 202。`docs/审查日志/归档/2026-10-11-全项目-审查报告.md:42-47` |
+| D1 | 中（已登记 A3） | ~~Provider 输出不符合 `outputSchema` 时 `jsonschema.ValidationError` **不是** `ValueError` 子类，逃出 `except (PydanticValidationError, SchemaError, ValueError)`，异常穿透 `finally` 并把该 Provider 的 WebSocket 整条打断~~ **【已修复】** | `main.py:118-126`（原为 `:118`，无局部捕获） | **已修复**：出参校验已包进局部 `try`，`except ValidationError` → `transition_terminal(task, {"status":"failed","result":None,"error":{"code":"OutputValidationError","message":…}})` + `return`，因此异常不再冒泡到 socket 级 `except`（现位于 `:327-330`）：**连接保持，只有该任务落 `failed` 终态**。原后果（Provider 掉线、在飞任务停在 `working` 直到 TTL）随之消失。`docs/审查日志/归档/2026-10-11-全项目-审查报告.md:42-47` |
 | D2 | 低（已登记 A4） | 先 `registry.get_tool` 判存在，再 `list_tools()` + `next(...)` 反查 `provider_id`，两次加锁之间 Provider 掉线 → `StopIteration` → 500 | `main.py:230`、`main.py:258-259` | 偶发 500，应为 503 或回退到未派发分支。`docs/审查日志/归档/2026-10-11-全项目-审查报告.md:49-53` |
 | D3 | 中 | `handle_provider_event` 对冲突/终态拒绝的返回值完全不检查：`transition` 返回 `(False, "conflict"/"terminal")` 被丢弃，无日志无计数 | `main.py:74-79`、`main.py:99-121` | 迟到消息、错序消息、`rejected` 在 `working` 后到达等全部静默丢失，排障无痕迹 |
-| D4 | 中 | 协议违规一律 `raise ValueError` → 关整条 WS 连接。单个畸形消息（缺 `task_id`、`status` 值非法、`success` 缺失、`task_id` 不属于该 Provider）即可踢掉整个 Provider 及其全部工具 | `main.py:89,96,109,114` | 单点畸形载荷放大为全 Provider 故障；行为等价于 D1 的放大器 |
+| D4 | 中 | 协议违规一律 `raise ValueError` → 关整条 WS 连接。单个畸形消息（缺 `task_id`、`status` 值非法、`success` 缺失、`task_id` 不属于该 Provider）即可踢掉整个 Provider 及其全部工具 | `main.py:89,96,109,114` | 单点畸形载荷放大为全 Provider 故障。**注**：`~~D1~~`（出参校验断连）已修复，本条说的是**入参/协议级**畸形消息，仍是"一条坏消息踢掉整个 Provider"的独立路径，未修 |
 | D5 | 中 | `callback_worker` 只要 `lrem`/`lpush` 抛 `RedisError`（Redis 短时不可用即会），异常即逃出 `while True`，**后台任务永久死亡**；`lifespan` 只在关闭时 cancel，不会重启 | `main.py:143-148` | Redis 抖动一次即永久失去回调投递能力（进程仍健康、`/api/health` 甚至可能恢复为 ok），故障静默 |
 | D6 | 中 | 重试用固定 `sleep(1)`，**无指数退避、无最大次数、无保留期限**，且 outbox/processing **无 TTL** | `main.py:149`、`main.py:141` | 毒消息造成无限重试+日志洪水；不可投递条目永久占用内存。与 `docs/18:110,123` 的「退避策略」「明确的保留期限」不符 |
 | D7 | 低 | `callback_worker` 用 `lrem(processing, 1, item)` 按**值**删除。当 outbox 中存在两条完全相同的 JSON 时可能删错一条 | `main.py:142`、`main.py:146` | 概率极低但会破坏至少一次语义。`docs/审查日志/归档/2026-10-11-全项目-审查报告.md:73` |
@@ -3533,7 +3535,7 @@ Workflow 端口类型靠 `x-workflow-port-type`（JSON Schema 扩展关键字，
 | D17 | 低 | `TOOL_DISPATCH_TIMEOUT_SECONDS` 是死配置 | `settings.py:20,48` | 运维以为派发有独立超时，实际由队列满/连接存在与否决定 |
 | D18 | 低 | `ToolContext.annotations` 是类级可变默认 `{}`；`ToolProvider.discover` 会把模块命名空间里 import 进来的具体 Tool 子类一并注册 | `tool.py:22`、`runtime.py:50-56` | 前者是共享可变状态陷阱，后者是隐蔽的重名/串模块风险 |
 | D19 | 低 | Provider 事件队列无界（`queue.Queue()`），`report_progress` 无节流 | `runtime.py:36`、`runtime.py:215-222` | 高频进度工具可把内存推高；而服务端 `progress` 只写字段，不落 Mongo |
-| D20 | 低 | 输出 schema 校验在 Provider（`runtime.py:236`）与 Server（`main.py:118`）各做一次，且 Server 侧那次会打断连接（D1） | `runtime.py:236`、`main.py:118` | 同一份校验两处实现、两套失败语义（Provider 转 `failed` 事件；Server 断连） |
+| D20 | 低 | 输出 schema 校验在 Provider（`runtime.py:236`）与 Server（`main.py:118`）各做一次 | `runtime.py:236`、`main.py:118-126` | 同一份校验两处实现。~~两套失败语义（Provider 转 `failed` 事件；Server 断连）~~ **已收敛**：Server 侧现已同样转为该任务 `failed` 终态（`~~D1~~` 已修复），两侧语义一致，只剩"同一份校验写两遍"的维护成本 |
 | D21 | 低 | `qqapi` 用 `os.environ[...]` 直接索引，缺 `QQ_API_BASE_URL`/`QQ_API_TOKEN` 时在**调用时**才 `KeyError`，无启动期校验 | `qqapi.py:7,9` | 配置缺失延后到生产调用才暴露，错误以「任务 failed, code=KeyError」的形式出现 |
 | D22 | 低 | `documents.pin` 修改 `pinned` 时**不更新** `updated_at`，而 create/append/rewrite/rename 都更新 | `documents.py:259-265` | 任务流水中「最后修改时间」对钉住操作失真 |
 | D23 | 低 | `documents.query_by_name` 无 `limit`、标题字段无索引，返回**全部**命中文档 | `documents.py:96-98` | 大集合下既是全表扫描又是无界响应体；输出校验通过（schema 只约束形状） |
@@ -4463,7 +4465,7 @@ WebUI 对 pending 列表的删除/编辑按 `LINDEX -position` + `LSET` + `LREM`
 | R-11 | review（流程项，见 `docs/审计.md`） | `todo.md:1`；`docs/审计.md:1-10` | 重构 | — | 否 |
 | ~~R-12~~ | ~~agent 契约漏注册 `map_content_get`，含该节点的工作流无法执行~~ **【已修复】** | 原登记：`归档/2026-10-11-全项目-审查报告.md:27-33`（A1）、汇总报告条目 1、本文 §1 ~~D1~~ / §8.1 | 缺陷 | ~~高~~ **已关闭** | 否 |
 | R-13 | async 回调 `on` 含非字符串元素时校验器崩溃（agent + manager 两份同构代码） | `归档/2026-10-11-全项目-审查报告.md:35-40`（本轮复核仍在；汇总报告条目 11） | 缺陷 | 中 | 否 |
-| R-14 | Provider 输出不符合 `outputSchema` 时打断 WebSocket 连接 | `归档/2026-10-11-全项目-审查报告.md:42-47`（本轮复核仍在；汇总报告条目 3） | 缺陷 | 中 | 否 |
+| ~~R-14~~ | ~~Provider 输出不符合 `outputSchema` 时打断 WebSocket 连接~~ **【已修复】** | 原登记：`归档/2026-10-11-全项目-审查报告.md:42-47`（A3）、汇总报告原条目 3、本文 §5 ~~D1~~ / §8.9 | 缺陷 | ~~中~~ **已关闭** | 否 |
 | R-15 | `call_tool` 派发前 `next(...)` 竞态 → 500 而非 503 | `归档/2026-10-11-全项目-审查报告.md:49-53`（本轮复核仍在；汇总报告条目 35） | 缺陷 | 低 | 否 |
 | R-16 | 双校验器分叉：manager 保存校验是 agent `validate_workflow` 的子集 | `归档/2026-10-11-全项目-审查报告.md:57`；同项 `2026-09-13` W1、`2026-09-14` H-04/L-10（均见 `归档/`）；汇总报告条目 8 | 重构 | 长期 | 否 |
 | R-17 | 保存时静默丢弃类型不匹配的连接，且不回告前端 | `归档/2026-10-11-全项目-审查报告.md:58`；同项 `2026-09-14` H-05；汇总报告条目 9 | 缺陷 | 中 | 否 |
@@ -4533,13 +4535,13 @@ WebUI 对 pending 列表的删除/编辑按 `LINDEX -position` + `LSET` + `LREM`
 | R-81 | 全局/激活 Workflow 回退（已被绑定路由取代） | `docs/24:12`；`docs/20:78` | 重构 | 已关闭 | 否 |
 | R-82 | `_id="agent"` 全局设置读取逻辑删除 | `docs/24:12` | 重构 | 已关闭 | 否 |
 
-> 计数：上表 **82** 项，其中**已关闭 7 项**（**R-12 已修复**；R-41 / R-47 / R-68 / R-69 因对象已随重构删除而关闭；R-81 / R-82 保留在表内以标记"曾经的路线图项已被绑定路由取代"），**纯设想 12** 项。已关闭项保留在表内并在状态列标注，以免按旧编号重复排查。
+> 计数：上表 **82** 项，其中**已关闭 8 项**（**R-12、R-14 已修复**；R-41 / R-47 / R-68 / R-69 因对象已随重构删除而关闭；R-81 / R-82 保留在表内以标记"曾经的路线图项已被绑定路由取代"），**纯设想 12** 项。已关闭项保留在表内并在状态列标注，以免按旧编号重复排查。
 
 ## 已知问题摘要
 
 仅列**结论与编号**，不复述证据；"仍成立"指本轮静态复核在源码中仍能定位到对应实现。
 
-### 2026-10-11 全项目审查报告（最新快照；A1 已修复，A2–A4 仍未修复）
+### 2026-10-11 全项目审查报告（最新快照；A1、A3 已修复，A2、A4 仍未修复）
 
 > 来源文件已归档：实际路径为 `docs/审查日志/归档/2026-10-11-全项目-审查报告.md`，下表引用的 `:行号` 属该件自身行号。**当前问题清单以 `docs/审查日志/汇总报告.md` 为准。**
 
@@ -4547,7 +4549,7 @@ WebUI 对 pending 列表的删除/编辑按 `LINDEX -position` + `LSET` + `LREM`
 | --- | --- | --- |
 | ~~A1~~ [高] | ~~agent 契约漏注册 `map_content_get`，含该节点的工作流无法执行~~ **【已修复】** | 原证据：`agent/workflow_contract.py:51-75` 无该项，`agent/workflow_validator.py:178` 会 `KeyError`。**现 `workflow_contract.py:58` 已补 `"map_content_get": set(),`**，三处集合恢复一致；容器红测明细见 `归档/2026-10-11-全项目-审查报告.md:19-21`（该次 `KeyError` ERROR + 集合对账 FAIL 应随之转绿，本轮未复跑） |
 | A2 [中] | async 回调 `on` 含非字符串元素时校验器崩溃 | **仍成立**：`agent/workflow_validator.py:389` 与 `manager_webui/workflows.py:129` 均在类型判断前做集合成员测试 |
-| A3 [中] | Provider 输出不符合 `outputSchema` 时打断 WebSocket 连接 | **仍成立**：`tool_server/main.py:118` 抛出的 `jsonschema.ValidationError` 不在 `:319` 的 except 元组内 |
+| ~~A3~~ [中] | ~~Provider 输出不符合 `outputSchema` 时打断 WebSocket 连接~~ **【已修复】** | 原证据：`tool_server/main.py:118` 抛出的 `jsonschema.ValidationError` 不在原 `:319` 的 except 元组内。**现 `:118-126` 已把该校验包进局部 `try`** → 捕获后该任务转 `failed` 终态（`error.code = "OutputValidationError"`）并 `return`，不再冒泡到 socket 级 `except`（现位于 `:327-330`），连接保持、其余工具不受影响 |
 | A4 [低] | `call_tool` 派发前 `next(...)` 存在竞态 | **仍成立**：`tool_server/main.py:259` 无默认值 |
 | 3.1–3.9 | 双校验器分叉、保存静默丢连接、`event_catalog` 状态枚举、改名/删除引用面、入口 payload 无强校验、LLM 空值语义、env 矩阵缺口、sessions 索引、`api_key` 明文 | 逐条与源码一致，未发现修复痕迹；见路线图 R-16 至 R-24 |
 | B1 | `workflow_canvas.mjs` 过期副本 | **仍成立且更明显**：`TYPE_COLORS`(`:5-24`) 缺 map/deserialize/`map_content_get`，`CONNECTION_COLORS`(`:26-34`) 缺 `map-content`，`contractPortIds`(`:54-101`) 对这些节点返回 `[]` |
@@ -4837,28 +4839,30 @@ def handle_task(e: dict):
 
 ---
 
-## 8.9 【已核验】A3：同一个 `ValidationError`，一处被捕获、一处被漏掉
+## 8.9 【已核验·**已修复**】A3：同一个 `ValidationError`，一处被捕获、一处被漏掉
 
-**核验状态：父代理逐行对比 `tool_server/main.py` 的两处 `except`，成立。**
+> **修复状态：已修复。** `tool_server/main.py:118-126` 现在把出参校验包进局部 `try`，`except ValidationError` → `transition_terminal(task, {"status": "failed", "result": None, "error": {"code": "OutputValidationError", "message": …}})` 并 `return`。异常不再冒泡到 socket 级 `except`（现位于 `:327-330`），**WebSocket 连接保持，只有该任务落 `failed` 终态**。**本节保留原始判定，作为"同一异常类在同一文件里被区别对待"这一取证方法的案例记录。**
+
+**核验状态（修复前）：父代理逐行对比 `tool_server/main.py` 的两处 `except`，成立。**
 
 这条的价值在于**证据极其干净**——不是"某个异常没被捕获"，而是**同一个异常类在同一文件里被区别对待**：
 
 | 位置 | 场景 | except 元组 | 是否覆盖 `jsonschema.ValidationError` |
 | --- | --- | --- | --- |
 | `tool_server/main.py:236-239` | **入参**校验（HTTP 端点内） | `(SchemaError, ValidationError)` | ✅ **显式捕获**，转 422 |
-| `tool_server/main.py:316-320` | **出参**校验（WebSocket 消息循环） | `(PydanticValidationError, SchemaError, ValueError)` | ❌ **漏掉** |
+| `tool_server/main.py:327-330`（原 `:316-320`） | **出参/协议**校验（WebSocket 消息循环） | `(PydanticValidationError, SchemaError, ValueError)` | 出参那条已由 `:118-126` 就地捕获，**不再到达这里**；协议级 `ValueError` 仍会在此关闭连接（= 缺陷 D4，未修） |
 
-出参校验发生在被调用的 `handle_provider_event` 内部：`tool_server/main.py:118`
+出参校验发生在被调用的 `handle_provider_event` 内部。**修复前**它是裸露的一行：`tool_server/main.py:118`
 
 ```python
 Draft202012Validator(tool.outputSchema).validate(event.output)
 ```
 
-它抛出的 `jsonschema.ValidationError` 不在 `:319` 的元组里（注意该元组里写的是 **`PydanticValidationError`**，与 `:238` 的 `ValidationError` **不是同一个类**）→ 异常穿透 `while True` → 穿透 `:323` 的 `finally`（该 `finally` 会 `registry.unregister(connection)` 并 `hdel tool:providers`）→ 整条 WebSocket 连接被拆掉。
+它抛出的 `jsonschema.ValidationError` 不在原 `:319` 的元组里（注意该元组里写的是 **`PydanticValidationError`**，与 `:238` 的 `ValidationError` **不是同一个类**）→ 异常穿透 `while True` → 穿透 `finally`（该 `finally` 会 `registry.unregister(connection)` 并 `hdel tool:providers`）→ 整条 WebSocket 连接被拆掉。
 
-**后果**：Provider 只要有一次输出不符合自己声明的 `outputSchema`，就**连带踢掉该 Provider 上的全部工具**，而不只是这一个任务失败。单点故障被放大。
+**修复前的后果**：Provider 只要有一次输出不符合自己声明的 `outputSchema`，就**连带踢掉该 Provider 上的全部工具**，而不只是这一个任务失败。单点故障被放大。**修复后**：该任务单独失败，Provider 与其余下工具不受影响。
 
-> 归属：第 5 章独立报告为 D1；第 7 章记为未修复的 A3；本章给出"同类异常区别对待"的判定证据。
+> 归属：第 5 章独立报告为 ~~D1~~；第 7 章记为 A3；本章给出"同类异常区别对待"的判定证据。**现已修复**（`汇总报告` 条目 3 已随之关闭）。
 
 ---
 
@@ -4889,13 +4893,14 @@ provider_id = next(item["provider_id"] for item in tools if item["name"] == tool
 | --- | --- | --- | --- |
 | ~~**A1**~~ | ~~`map_content_get` 契约缺项~~ **【已修复】** | `归档/2026-10-11-全项目-审查报告.md`（A1） | **已修复**：`workflow_contract.py:58` 已补 `"map_content_get": set(),`（= 本文 §1 ~~D1~~、~~R-12~~、`汇总报告` 条目 1 —— **该条目已随之关闭**） |
 | **A2** | 对 `callback.on` 的 dict 元素做集合成员测试 | 同上（A2） | 仍未修复（`workflow_validator.py:389`、`manager_webui/workflows.py:129`；= 本文 §1 D6、汇总报告条目 11） |
-| **A3** | 出参 `ValidationError` 打断 Provider 连接 | 同上（A3） | 仍未修复（§8.9 已复核；= 本文 §5 D1、R-14、汇总报告条目 3） |
+| ~~**A3**~~ | ~~出参 `ValidationError` 打断 Provider 连接~~ **【已修复】** | 同上（A3） | **已修复**：`tool_server/main.py:118-126` 局部 `try` → 该任务转 `failed` 终态，连接保持（= 本文 §5 ~~D1~~、~~R-14~~、`汇总报告` 条目 3 —— **该条目已随之关闭**） |
 | **A4** | `call_tool` 注册表查询竞态 | 同上（A4） | 仍未修复（§8.10 已复核；= 本文 §5 D2、R-15、汇总报告条目 35） |
 | 无编号 | 编辑器不校验控制端口连通性 | **本轮新发现** | 见 §8.2 |
 | 无编号 | `response`/`error` 绑定自环 | **本轮新发现** | 见 §8.7 |
 | 无编号 | System Prompt 功能已从代码移除 | **本轮新发现**（§8.8） | 见 §8.8；`核验报告` §4.1 独立得出同一结论（A-09 = GONE、M-08 失效） |
+| 无编号 | **`_validate_node` 两张表成员校验不对齐**（校验失败降级为静默 `KeyError`） | **本轮新登记** | `workflow_validator.py:161` 校验 `SUPPORTED_NODE_TYPES`、`:178` 裸下标取 `NODE_ARGUMENT_FIELDS_BY_TYPE`；见 `汇总报告` §2.3 条目 53 |
 
-**判断口径**：`归档/2026-10-11-全项目-审查报告.md` 是在容器内跑过测试的**最新全项目快照**（**文件已归档**，其 `file:line` 属该件自身行号）。该快照的四项生产缺陷中，**A1 已修复**，**A2–A4 三项在本次静态复核中逐条仍然成立**。而更早的 `归档/2026-09-14-全项目-问题报告.md`、`归档/2026-09-13-全项目-审查报告.md` 中的多项（F-01 模型参数被忽略、F-03/H-06 `rpc_*`/`active`/`tool_excute` 死链、H-07、M-10、R2/D2）**已通过重构或删除关闭**——引用旧报告前必须核销。
+**判断口径**：`归档/2026-10-11-全项目-审查报告.md` 是在容器内跑过测试的**最新全项目快照**（**文件已归档**，其 `file:line` 属该件自身行号）。该快照的四项生产缺陷中，**A1 与 A3 已修复**，**A2、A4 在本次静态复核中仍然成立**。而更早的 `归档/2026-09-14-全项目-问题报告.md`、`归档/2026-09-13-全项目-审查报告.md` 中的多项（F-01 模型参数被忽略、F-03/H-06 `rpc_*`/`active`/`tool_excute` 死链、H-07、M-10、R2/D2）**已通过重构或删除关闭**——引用旧报告前必须核销。
 
 > **与 `docs/审查日志/` 的分工**：上面这张表只说明"这些编号不是新发现"。**哪一条还成立、逐条判定与当前行号，以 `docs/审查日志/汇总报告.md`（52 条待修）与 `docs/审查日志/核验报告.md`（221 条判定）为准**——它们是对全部历史日志做过一次完整核销后的现行清单。
 
@@ -4952,7 +4957,7 @@ provider_id = next(item["provider_id"] for item in tools if item["name"] == tool
 | 8.6 | 通读 `agent/task_worker.py` 全文（126 行） |
 | 8.7 | 通读 `agent/task_worker.py:43-53`；核对 `qqbot_consumer/queue_consumer.py:28` |
 | 8.8 | 全仓库 `*.py` 检索 + glob 检索 `settings*.json` + 通读 `agent/task_worker.py` |
-| 8.9 | 逐行对比 `tool_server/main.py:236-239` 与 `:316-320` 两处 `except` |
+| 8.9 | 逐行对比 `tool_server/main.py:236-239` 与 socket 级 `except`（修复前为 `:316-320`，现为 `:327-330`）两处 `except`，并确认 `:118-126` 的局部 `try` 已把出参校验的 `ValidationError` 就地转为 `failed` 终态 |
 | 8.10 | 读 `tool_server/main.py:236-260` |
 | 8.13 | 比对 `workflow_editor/static/css/workflow/canvas.css` 与 `workflow_canvas.mjs` 的配色定义表 |
 | 8.15 | 复核 `tool_server/main.py:57,141` 的投递队列来源与 `agent/task_worker.py:43-53` 的分支条件（**用户指出后补验**，原稿判定有误） |
