@@ -55,6 +55,7 @@ NODE_ARGUMENT_FIELDS_BY_TYPE = {
     "construct_message": {"role", "role_source"},
     "construct_content": {"append_items"},
     "construct_map_content": {"mappings"},
+    "map_content_get": set(),
     "split_event": set(),
     "deserialize_json": {"outputs"},
     "construct_list": {"item_type", "initial_value_count"},

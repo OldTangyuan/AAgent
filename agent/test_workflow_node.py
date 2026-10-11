@@ -260,6 +260,48 @@ class CallableWorkflowNodeTest(unittest.TestCase):
         )
         self.assertEqual(parsed[1]["data_outputs"]["events"], [[2, "workflow:events"]])
 
+    def test_validator_and_parser_accept_map_content_nodes(self):
+        workflow = {
+            "input_ports": [{"name": "key", "type": "content"}],
+            "output_ports": [{"name": "result", "type": "content"}],
+            "nodes": [
+                {
+                    "id": "input",
+                    "type": "input",
+                    "workflowPorts": [
+                        {"id": "workflow:key", "name": "key", "type": "content"}
+                    ],
+                },
+                {
+                    "id": "construct",
+                    "type": "construct_map_content",
+                    "arguments": {"mappings": [{"key": "done", "value": "已完成"}]},
+                },
+                {"id": "get", "type": "map_content_get"},
+                {
+                    "id": "output",
+                    "type": "output",
+                    "workflowPorts": [
+                        {"id": "workflow:result", "name": "result", "type": "content"}
+                    ],
+                },
+            ],
+            "connections": [
+                {"fromId": "input", "fromPortId": "control-out", "toId": "construct", "toPortId": "control-in", "type": "control"},
+                {"fromId": "construct", "fromPortId": "control-out", "toId": "get", "toPortId": "control-in", "type": "control"},
+                {"fromId": "get", "fromPortId": "control-out", "toId": "output", "toPortId": "control-in", "type": "control"},
+                {"fromId": "construct", "fromPortId": "map-out", "toId": "get", "toPortId": "map-in", "type": "map-content"},
+                {"fromId": "input", "fromPortId": "workflow:key", "toId": "get", "toPortId": "key-in", "type": "content"},
+                {"fromId": "get", "fromPortId": "content-out", "toId": "output", "toPortId": "workflow:result", "type": "content"},
+            ],
+        }
+
+        validate_workflow(workflow)
+        parsed = parse_workflow(workflow)
+
+        self.assertEqual(parsed[2]["data_inputs"]["map-in"], [1, "map-out", None])
+        self.assertEqual(parsed[2]["data_inputs"]["key-in"], [0, "workflow:key", None])
+
     def test_validator_accepts_history_event_list_to_foreach(self):
         workflow = {
             "input_ports": [],

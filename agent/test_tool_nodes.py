@@ -16,7 +16,11 @@ from workflow_validator import WorkflowValidationError, validate_workflow
 def tool_workflow_map(node_type: str, **arguments) -> list[dict]:
     is_remote = node_type in {"remote_sync_tool", "remote_async_tool"}
     parameters = [{"name": "value", "type": "content"}] if is_remote else ["value"]
-    output_port = "task_id" if node_type == "remote_async_tool" else "result"
+    output_port = (
+        "task_id" if node_type == "remote_async_tool"
+        else "result" if node_type == "remote_sync_tool"
+        else "output"
+    )
     if node_type == "remote_sync_tool":
         arguments = {"outputs": [{"name": "result", "type": "content"}], **arguments}
     return [
@@ -62,7 +66,7 @@ def valid_workflow(node: dict) -> dict:
 
 
 class ToolNodeExecutionTest(unittest.TestCase):
-    def test_local_tool_uses_process_executor_and_serializes_result(self):
+    def test_local_tool_serializes_result(self):
         execute_tool = Mock()
         execute_tool.return_value = {"ok": True}
         tool_module = types.ModuleType("tools.tool")
