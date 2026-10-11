@@ -3,7 +3,7 @@
 > 类型:核验记录。
 > 性质:现行文档。
 > 归属:`manager_webui/` + `webui_py/` + `workflow_editor/`。
-> 适用版本:平台 `0.1.0+`。
+> 适用版本:平台 `4.0.0+`。
 
 > 判定时间：本次会话；判定依据：仅当前源码（`read`/`glob`/`grep`），不引用历史报告描述、不引用旧行号。
 > 当前实际存在的 HTTP 服务只有 4 个：`webui_py`(8081)、`manager_webui`(8084)、`workflow_editor`(8082)、`tool_server`(8083)。

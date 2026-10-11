@@ -3,7 +3,7 @@
 > 类型:审计报告（分节草稿）。
 > 性质:现行文档。
 > 归属:`manager_webui/`。
-> 适用版本:平台 `0.1.0+`。
+> 适用版本:平台 `4.0.0+`。
 
 `manager_webui/` 是一个 FastAPI 单进程服务（`docker-compose.yml:96-129`，`uvicorn main:app --port 8084`），同时承担三类职责：
 
