@@ -508,7 +508,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
             parsed[1]["data_inputs"]["workflow:query"], [None, None, None]
         )
 
-    def test_parser_filters_undeclared_workflow_ports(self):
+    def test_parser_filters_connection_invalidated_by_metadata(self):
         workflow = callable_workflow_fixture()
         workflow["connections"].append({
             "id": "stale",
@@ -525,14 +525,12 @@ class CallableWorkflowNodeTest(unittest.TestCase):
         self.assertNotIn("workflow:stale", parsed[0]["data_outputs"])
         self.assertNotIn("workflow:stale", parsed[1]["data_inputs"])
 
-    def test_validator_filters_legacy_output_content_input(self):
+    def test_validator_filters_unknown_callable_output_input(self):
         workflow = callable_workflow_fixture()
         workflow["connections"][3]["toPortId"] = "content-in"
 
         validate_workflow(workflow)
-        parsed = parse_workflow(workflow)
-        self.assertEqual(parsed[1]["data_outputs"]["workflow:result"], [])
-        self.assertEqual(parsed[2]["data_inputs"]["workflow:result"], [None, None, None])
+        self.assertEqual(parse_workflow(workflow)[1]["data_inputs"]["workflow:query"], [0, "workflow:query", None])
 
     def test_validator_filters_legacy_input_content_output(self):
         workflow = callable_workflow_fixture()

@@ -22,12 +22,20 @@ let baseline = '';
 const roles = ['system', 'user', 'assistant', 'tool'];
 function initialValue(type) {
   if (type === 'content') return '';
+  if (type === 'map-content') return {};
   if (type.startsWith('list-')) return [];
   if (type === 'message') return { role: 'user', content: '' };
   return { event_type: '', payload: {} };
 }
 function copy(value) { return JSON.parse(JSON.stringify(value)); }
 function checkValue(type, value) {
+  if (type === 'map-content') {
+    if (!value || Array.isArray(value) || typeof value !== 'object' ||
+        Object.entries(value).some(([key, item]) => !key || typeof item !== 'string')) {
+      throw new Error('值必须是键非空、值为文本的 JSON 对象');
+    }
+    return;
+  }
   const itemType = type.replace(/^list-/, '');
   if (type.startsWith('list-')) {
     if (!Array.isArray(value)) throw new Error('值必须是数组');
@@ -102,6 +110,15 @@ function readItem(type, editor, label) {
   return { event_type: get('event_type'), payload, ...extras };
 }
 function readVisual() {
+  if (draftType === 'map-content') {
+    const entries = [...elements.visualEditor.querySelectorAll('.list-item')].map((row) => [
+      row.querySelector('[data-field="key"]').value,
+      row.querySelector('[data-field="value"]').value,
+    ]);
+    if (entries.some(([key]) => !key)) throw new Error('键不能为空');
+    if (new Set(entries.map(([key]) => key)).size !== entries.length) throw new Error('键不能重复');
+    return Object.fromEntries(entries);
+  }
   const type = draftType.replace(/^list-/, '');
   if (draftType.startsWith('list-')) {
     return [...elements.visualEditor.querySelectorAll('.list-item')].map((row, index) =>
@@ -137,6 +154,19 @@ function renderEditor() {
     return;
   }
   elements.visualEditor.replaceChildren();
+  if (type === 'map-content') {
+    const list = document.createElement('div');
+    list.className = 'editor-list';
+    for (const [key, value] of Object.entries(draft)) {
+      list.append(mapRow(key, value));
+    }
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.dataset.action = 'add';
+    add.textContent = '+ 添加一项';
+    elements.visualEditor.append(list, add);
+    return;
+  }
   if (!type.startsWith('list-')) {
     elements.visualEditor.append(itemEditor(type, draft));
     return;
@@ -173,6 +203,19 @@ function renderEditor() {
   add.dataset.action = 'add';
   add.textContent = '+ 添加一项';
   elements.visualEditor.append(list, add);
+}
+function mapRow(key, value) {
+  const row = document.createElement('section');
+  row.className = 'list-item map-item';
+  const fields = document.createElement('div');
+  fields.className = 'item-fields';
+  fields.append(field('键', key, 'key'), field('内容', value, 'value', true));
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.dataset.action = 'remove';
+  remove.textContent = '删除';
+  row.append(fields, remove);
+  return row;
 }
 function setDraft(type, value) {
   draftType = type;
@@ -311,6 +354,16 @@ elements.visualEditor.addEventListener('click', (event) => {
   if (!button) return;
   const action = button.dataset.action;
   const row = button.closest('.list-item');
+  if (draftType === 'map-content') {
+    if (action === 'remove') row.remove();
+    if (action === 'add') {
+      const added = mapRow('', '');
+      elements.visualEditor.querySelector('.editor-list').append(added);
+      added.querySelector('[data-field="key"]').focus();
+    }
+    report('');
+    return;
+  }
   if (action === 'remove') row.remove();
   try { draft = readVisual(); }
   catch (error) { report(error.message); return; }

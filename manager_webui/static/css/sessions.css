@@ -60,7 +60,10 @@ input,select,textarea { border:1px solid var(--line); border-radius:0; padding:8
 .item-head > div { flex:none; display:flex; gap:4px; }
 .item-head button { min-width:32px; padding:0 8px; }
 .list-item .item-fields { padding:14px; }
+.map-item .item-fields { grid-template-columns:minmax(120px,1fr) minmax(0,2fr); align-items:start; }
+.map-item > button { display:block; margin:0 14px 14px auto; }
 .form textarea { flex:1; min-height:0; width:100%; margin-top:2px; padding:16px; resize:none; border:1px solid var(--line); background-color:#fff; background-image:linear-gradient(transparent 25px,rgba(23,32,29,.035) 25px); background-position:0 16px; background-size:100% 26px; font:12px/26px Consolas,"Microsoft YaHei",monospace; tab-size:2; }
+.map-item textarea { min-height:80px; resize:vertical; }
 .form textarea:focus { outline:2px solid rgba(19,119,90,.2); outline-offset:-2px; }
 .form footer { min-height:62px; padding:12px 22px; display:flex; align-items:center; gap:9px; border-top:1px solid var(--line); background:#fff; }
 #formStatus { flex:1; min-width:0; color:var(--muted); font-size:11px; overflow-wrap:anywhere; }
@@ -70,3 +73,4 @@ input,select,textarea { border:1px solid var(--line); border-radius:0; padding:8
 .empty-detail[hidden] { display:none; }
 @media (max-width:1000px) { .workspace { grid-template-columns:260px minmax(0,1fr); } .detail-head { align-items:flex-start; flex-wrap:wrap; } }
 @media (max-width:700px) { .topbar { height:106px; padding:0 12px; } .topbar .page-nav { top:57px; right:12px; left:12px; height:36px; justify-content:space-between; transform:none; } .topbar .page-nav a { flex:1; justify-content:center; padding:0 3px; font-size:10px; } main { width:100%; padding:0; } .workspace { grid-template-columns:1fr; grid-template-rows:minmax(200px,32%) minmax(0,1fr); border:0; box-shadow:none; } .sidebar { border-right:0; border-bottom:1px solid var(--line); } .sidebar-head,.detail-head { min-height:64px; padding:11px 14px; } .sidebar-head h1 { font-size:20px; } .detail-head h2 { font-size:17px; } .form > label:first-child { padding:12px 14px; } .value-head { padding:10px 14px; } .form .value-label { padding:0 14px 12px; } .visual-editor { padding:0 14px 14px; } .form footer { min-height:55px; padding:10px 14px; } }
+@media (max-width:700px) { .map-item .item-fields { grid-template-columns:1fr; } }
