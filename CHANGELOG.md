@@ -17,7 +17,7 @@ AAgent 平台的发布历史。格式遵循 [Keep a Changelog 1.1.0](https://kee
 
 ### 新增
 
-- 三层版本体系：`version.json`（权威清单）、8 个服务目录的 `version.json`（服务级副本：`platform` + `protocol`，随镜像进容器）、`scripts/check_version.py`（一致性校验）
+- 三层版本体系：`version.json`（权威清单）、8 个服务目录的 `version.json`（服务级副本：`platform` + `protocol`，随镜像进容器）
 - `docs/版本控制.md` —— 三代编号（引擎/功能/修补）的原理与字段定义
 - `docs/版本与归属规范.md` —— 版本号与文档归属的唯一可执行规则来源
 - 文档元信息头规范：`类型` / `性质` / `归属` / `适用版本`（协议类文档另加 `协议版本`）

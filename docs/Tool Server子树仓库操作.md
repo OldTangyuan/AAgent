@@ -137,9 +137,29 @@ git status --short
 
 子树发布不改变现有[版本与归属规范](版本与归属规范.md)。服务版本信息仍先在 AAgent 中按规范更新和提交，然后随服务目录发布。分仓库本身不会生成独立的版本序列，也不会自动完成跨仓库版本同步。
 
-父仓库的 Git 标签指向整个平台提交，不能直接当作服务仓库的发布标签推送。`git subtree push` 也不会自动发布标签。
+平台标签与服务标签是两套互相独立的标签：前者属于 AAgent 仓库、指向整个平台提交，后者属于 Tool Server 仓库、指向只含 `tool_server/` 的服务提交。两者分别创建、分别推送，命名和推送对象都不同。
 
-需要给某个平台发布所对应的服务代码打标签时，从那个平台标签派生服务提交，再给它创建服务标签。例如平台发布为 `v4.0.1`，且按版本规范本次服务版本也为 `4.0.1` 时：
+### 5.1 平台标签（AAgent 仓库）
+
+平台标签仍按[版本与归属规范](版本与归属规范.md) §6 在 AAgent 中创建：`vMAJOR.MINOR.PATCH`、附注标签（`git tag -a`）、只打在 `main` 上、该提交测试全绿。它归属于 AAgent 仓库，由 `git push origin` 发布，与 Tool Server 仓库无关。例如发布 `4.0.1` 时：
+
+```powershell
+cd D:\AAgent
+git checkout main
+git status --short
+git log --oneline -5
+git tag -a v4.0.1 -m "v4.0.1 — 一句话概括" -m "正文粘贴 CHANGELOG.md 中 [4.0.1] 的条目"
+git show v4.0.1
+git push origin v4.0.1
+```
+
+示例版本必须替换为实际版本。`git push origin main` 不会推送标签，标签要单独推送；`git push origin main --follow-tags` 只会带上从 `main` 可达的附注标签。不要用 `git push --tags`，它会把本地所有标签（含 legacy 锚点 `v2` / `v3` 与本地服务标签 `tool-server-v*`）一起推到 `origin`。
+
+平台标签指向的提交包含 `agent/`、`manager_webui/`、根目录等全部内容，服务仓库没有这些路径，因此**不能**把它直接推到 `tool-server` 当作服务发布标签。`git subtree push` 只同步分支，也不会自动发布标签。
+
+### 5.2 服务标签（Tool Server 仓库）
+
+服务标签从对应的平台标签派生：先用 `git subtree split` 从平台标签拆出只含 `tool_server/` 的服务提交，再给这条派生提交打标签，然后推送到 `tool-server` 远端。例如平台发布为 `v4.0.1`，且按版本规范本次服务版本也为 `4.0.1` 时：
 
 ```powershell
 git subtree split --prefix=tool_server v4.0.1 -b ts-release
@@ -152,7 +172,7 @@ git branch -D ts-release
 
 示例版本必须替换为实际存在的平台标签和服务版本。执行前确保临时分支、标签名未被占用，并已完成发布要求的容器测试。先发布相应服务代码，再发布标签；核对远端 `main` 已包含该发布提交。
 
-这里本地标签名为 `tool-server-v4.0.1`，服务远端标签名为 `v4.0.1`。使用不同本地名字，是为了避免与已有平台标签冲突。未参与本次平台迭代的服务按规范保留原服务版本，不必为每次平台发布重复打标签。
+本地标签名为 `tool-server-v4.0.1`，服务远端标签名为 `v4.0.1`：本地用带前缀的名字，避免与 AAgent 仓库中同名的平台标签冲突；远端按平台同一版本号命名。未参与本次平台迭代的服务按规范保留原服务版本，不必为每次平台发布重复打标签。
 
 不要对服务远端执行 `git push --tags`、`git push --all` 或 `git push --mirror`，这些命令可能把平台标签或其他分支一起发布过去。
 
