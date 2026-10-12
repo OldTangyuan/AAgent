@@ -168,23 +168,3 @@ workflow_editor/    Workflow 编辑器(8082)
 docs/               设计文档、审查记录与 README 图片
 data/               Redis / MongoDB 持久化数据(不提交)
 ```
-
-## 文档
-
-入口见 [`docs/README.md`](docs/README.md)。
-
-| 文档 | 内容 |
-| --- | --- |
-| [AAgent-功能全景](docs/功能全景/AAgent-功能全景.md) | 逐文件通读源码的功能 / API / 按钮全景（现行） |
-| [问题清单 4.0.5a](docs/review/4_0_5a.md) | 当前未修问题 |
-| [Event 1.0](docs/protocol/event_1_0.md) | Event 数据契约 |
-
-## TODO
-
-- MCTS reward通过workflow实现
-- 交叉验证
-- reAct multiAgent编排 (穿插引导:上下文代表任务状态+todo) *长任务核心
-
-## 安全
-
-不要提交 `.env`、API Key、访问 Token 或 `data/`。曾出现在源码或 Git 历史中的凭据必须先吊销,再从服务商处生成新凭据。
