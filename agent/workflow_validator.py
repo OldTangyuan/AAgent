@@ -19,6 +19,7 @@ from workflow_contract import (
     list_type_for_item,
     node_argument,
 )
+from workflow_parser import WORKFLOW_SCHEMA_VERSION
 
 
 class WorkflowValidationError(ValueError):
@@ -26,6 +27,10 @@ class WorkflowValidationError(ValueError):
 
 
 def validate_workflow(workflow: dict[str, Any]) -> None:
+    if workflow.get("schema_version") != WORKFLOW_SCHEMA_VERSION:
+        raise WorkflowValidationError(
+            f"workflow.schema_version must be {WORKFLOW_SCHEMA_VERSION}"
+        )
     nodes = workflow.get("nodes")
     connections = workflow.get("connections")
     if not isinstance(nodes, list):

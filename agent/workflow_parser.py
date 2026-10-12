@@ -23,6 +23,9 @@ class WorkflowParseError(ValueError):
     """Raised when a workflow cannot be loaded or compiled."""
 
 
+WORKFLOW_SCHEMA_VERSION = "1.1"
+
+
 def parse_workflow(workflow: dict[str, Any]) -> list[dict[str, Any]]:
     """Convert ``nodes`` and ``connections`` to an index-linked node list.
 
@@ -30,6 +33,11 @@ def parse_workflow(workflow: dict[str, Any]) -> list[dict[str, Any]]:
     slot in the form ``[node_index, port_id, value_or_default]``; data outputs
     contain endpoint lists.
     """
+    if workflow.get("schema_version") != WORKFLOW_SCHEMA_VERSION:
+        raise WorkflowParseError(
+            f"unsupported workflow schema_version: {workflow.get('schema_version')!r}; "
+            f"expected {WORKFLOW_SCHEMA_VERSION}"
+        )
     nodes = workflow["nodes"]
     connections = filter_connections(
         workflow["connections"],

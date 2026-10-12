@@ -33,7 +33,7 @@
 | 版本号怎么定、改了代码该更新哪些文档 | [版本与归属规范](版本与归属规范.md) |
 | 怎么把 Tool Server 发布到独立仓库并对齐版本 | [Tool Server子树仓库操作](Tool%20Server子树仓库操作.md) |
 | 怎么接新的聊天平台 / 事件源 | [功能全景](功能全景/AAgent-功能全景.md) 第 06 章 · [Event 1.0](protocol/event_1_0.md) |
-| Event / Workflow 的协议格式和版本以什么为准 | [Event 1.0](protocol/event_1_0.md) · [Workflow 1.0](protocol/workflow_1_0.md) |
+| Event / Workflow 的协议格式和版本以什么为准 | [Event 1.0](protocol/event_1_0.md) · [Workflow 1.1](protocol/workflow_1_1.md) |
 | 怎么加一个新工具 | [功能全景](功能全景/AAgent-功能全景.md) 第 05 章 |
 | 从零启动项目 | 根目录 [README](../README.md) |
 
@@ -53,7 +53,7 @@
 | 文档 | 协议版本 | 归属 |
 |---|---|---|
 | [Event 1.0](protocol/event_1_0.md) | `event 1.0` | 跨服务 |
-| [Workflow 1.0](protocol/workflow_1_0.md) | `workflow 1.0` | `agent/` + `workflow_editor/` + `manager_webui/` |
+| [Workflow 1.1](protocol/workflow_1_1.md) | `workflow 1.1` | `agent/` + `workflow_editor/` + `manager_webui/` |
 
 ## 前端（`webUI/`）
 

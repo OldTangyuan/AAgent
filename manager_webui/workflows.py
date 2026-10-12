@@ -19,6 +19,7 @@ MAX_WORKFLOW_METADATA_PORTS = 50
 MAX_WORKFLOW_NODE_REFERENCES = 50
 MAX_REMOTE_TOOL_REFERENCES = 100
 MAX_WORKFLOW_DESCRIPTION_LENGTH = 2000
+WORKFLOW_SCHEMA_VERSION = "1.1"
 DATA_TYPES = {"content", "message", "event", "map-content", "list-content", "list-message", "list-event"}
 
 NODE_BASE_FIELDS = {"id", "type", "name", "x", "y", "arguments"}
@@ -216,7 +217,7 @@ class WorkflowRequest(BaseModel):
 
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=MAX_WORKFLOW_DESCRIPTION_LENGTH)
-    version: int = Field(ge=1)
+    schema_version: Literal["1.1"]  # 只接受version=1.1的workflow
     input_ports: list[WorkflowPortMetadata] = Field(max_length=MAX_WORKFLOW_METADATA_PORTS)
     output_ports: list[WorkflowPortMetadata] = Field(max_length=MAX_WORKFLOW_METADATA_PORTS)
     nodes: list[dict[str, Any]] = Field(min_length=1, max_length=MAX_WORKFLOW_NODES)
@@ -505,7 +506,7 @@ def workflow_response(document: dict[str, Any]) -> dict[str, Any]:
         "id": str(document["_id"]),
         "name": document.get("name", ""),
         "description": document.get("description", ""),
-        "version": document.get("version", 1),
+        "schema_version": document.get("schema_version"),
         "nodes": document.get("nodes", []),
         "connections": document.get("connections", []),
         "input_ports": document.get("input_ports", []),
@@ -530,7 +531,7 @@ def create_workflows_router(
         try:
             items = workflows.find(
                 {},
-                {"name": 1, "description": 1, "version": 1, "nodes": 1, "connections": 1, "input_ports": 1, "output_ports": 1, "workflow_nodes": 1, "remote_tools": 1, "created_at": 1, "updated_at": 1},
+                {"name": 1, "description": 1, "schema_version": 1, "nodes": 1, "connections": 1, "input_ports": 1, "output_ports": 1, "workflow_nodes": 1, "remote_tools": 1, "created_at": 1, "updated_at": 1},
             ).sort("updated_at", DESCENDING)
             return {
                 "items": [
@@ -538,7 +539,7 @@ def create_workflows_router(
                         "id": str(item["_id"]),
                         "name": item.get("name", ""),
                         "description": item.get("description", ""),
-                        "version": item.get("version", 1),
+                        "schema_version": item.get("schema_version"),
                         "node_count": len(item.get("nodes", [])),
                         "connection_count": len(item.get("connections", [])),
                         "input_ports": item.get("input_ports", []),
@@ -563,7 +564,7 @@ def create_workflows_router(
         document = {
             "name": name,
             "description": "",
-            "version": 1,
+            "schema_version": WORKFLOW_SCHEMA_VERSION,
             "nodes": [
                 {"id": "input", "type": "input", "name": "Input", "x": 120, "y": 238, "workflowPorts": []},
                 {"id": "output", "type": "output", "name": "Output", "x": 520, "y": 238, "workflowPorts": []},

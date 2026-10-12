@@ -1,6 +1,35 @@
 import unittest
 
-from workflows import filter_invalid_connections, node_format_error
+from pydantic import ValidationError
+
+from workflows import WORKFLOW_SCHEMA_VERSION, WorkflowRequest, filter_invalid_connections, node_format_error
+
+
+class WorkflowSchemaVersionTest(unittest.TestCase):
+    def test_accepts_current_version_and_rejects_past_and_future_versions(self):
+        payload = {
+            "name": "echo",
+            "schema_version": WORKFLOW_SCHEMA_VERSION,
+            "input_ports": [],
+            "output_ports": [],
+            "nodes": [{"id": "output", "type": "output", "workflowPorts": []}],
+        }
+        self.assertEqual(
+            WorkflowRequest.model_validate(payload).schema_version,
+            WORKFLOW_SCHEMA_VERSION,
+        )
+
+        without_version = {key: value for key, value in payload.items() if key != "schema_version"}
+        with self.assertRaises(ValidationError) as raised:
+            WorkflowRequest.model_validate(without_version)
+        self.assertEqual(raised.exception.errors()[0]["loc"], ("schema_version",))
+
+        # 升级 Workflow 协议时，更新两侧样例，确保它们都不是当前版本。
+        for version in ("1.0", "1.2"):
+            with self.subTest(version=version):
+                with self.assertRaises(ValidationError) as raised:
+                    WorkflowRequest.model_validate({**payload, "schema_version": version})
+                self.assertEqual(raised.exception.errors()[0]["loc"], ("schema_version",))
 
 
 class WorkflowConnectionFilterTest(unittest.TestCase):

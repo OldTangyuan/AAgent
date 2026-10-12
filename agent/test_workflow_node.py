@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from workflow_contract import is_valid_connection
 from workflow_parser import parse_workflow
+from workflow_parser import WORKFLOW_SCHEMA_VERSION, WorkflowParseError
 from workflow_nodes import (
     run_workflow_map,
     workflow_construct_map_content,
@@ -18,6 +19,7 @@ from workflow_validator import WorkflowValidationError, validate_workflow
 
 def callable_workflow_fixture() -> dict:
     return {
+        "schema_version": WORKFLOW_SCHEMA_VERSION,
         "input_ports": [{"name": "query", "type": "content"}],
         "output_ports": [{"name": "result", "type": "content"}],
         "nodes": [
@@ -52,6 +54,41 @@ def callable_workflow_fixture() -> dict:
 
 
 class CallableWorkflowNodeTest(unittest.TestCase):
+    def test_validator_rejects_workflow_without_schema_version(self):
+        workflow = callable_workflow_fixture()
+        del workflow["schema_version"]
+
+        with self.assertRaisesRegex(
+            WorkflowValidationError,
+            f"workflow.schema_version must be {WORKFLOW_SCHEMA_VERSION}",
+        ):
+            validate_workflow(workflow)
+
+        with self.assertRaisesRegex(
+            WorkflowParseError,
+            "unsupported workflow schema_version: None",
+        ):
+            parse_workflow(workflow)
+
+    def test_validator_rejects_workflow_with_different_schema_version(self):
+        # 升级 Workflow 协议时，同步更新旧版和未来版样例，确保两者都不是当前版本。
+        for version in ("1.0", "1.2"):
+            with self.subTest(version=version):
+                workflow = callable_workflow_fixture()
+                workflow["schema_version"] = version
+
+                with self.assertRaisesRegex(
+                    WorkflowValidationError,
+                    f"workflow.schema_version must be {WORKFLOW_SCHEMA_VERSION}",
+                ):
+                    validate_workflow(workflow)
+
+                with self.assertRaisesRegex(
+                    WorkflowParseError,
+                    f"unsupported workflow schema_version: '{version}'",
+                ):
+                    parse_workflow(workflow)
+
     def test_construct_message_role_port_requires_content_connection(self):
         nodes_by_id = {
             "input": {
@@ -86,6 +123,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
 
     def test_validator_reads_construct_list_item_type_from_arguments(self):
         workflow = {
+            "schema_version": WORKFLOW_SCHEMA_VERSION,
             "input_ports": [{"name": "value", "type": "content"}],
             "output_ports": [{"name": "values", "type": "list-content"}],
             "nodes": [
@@ -157,6 +195,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
 
     def test_llm_accepts_list_message_input(self):
         workflow = {
+            "schema_version": WORKFLOW_SCHEMA_VERSION,
             "input_ports": [{"name": "messages", "type": "list-message"}],
             "output_ports": [],
             "nodes": [
@@ -227,6 +266,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
 
     def test_validator_and_parser_accept_history_node(self):
         workflow = {
+            "schema_version": WORKFLOW_SCHEMA_VERSION,
             "input_ports": [],
             "output_ports": [{"name": "events", "type": "list-event"}],
             "nodes": [
@@ -262,6 +302,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
 
     def test_validator_and_parser_accept_map_content_nodes(self):
         workflow = {
+            "schema_version": WORKFLOW_SCHEMA_VERSION,
             "input_ports": [{"name": "key", "type": "content"}],
             "output_ports": [{"name": "result", "type": "content"}],
             "nodes": [
@@ -304,6 +345,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
 
     def test_validator_accepts_history_event_list_to_foreach(self):
         workflow = {
+            "schema_version": WORKFLOW_SCHEMA_VERSION,
             "input_ports": [],
             "output_ports": [],
             "nodes": [
@@ -333,6 +375,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
 
     def test_validator_and_parser_accept_split_event_node(self):
         workflow = {
+            "schema_version": WORKFLOW_SCHEMA_VERSION,
             "input_ports": [{"name": "event", "type": "event"}],
             "output_ports": [
                 {"name": "type", "type": "content"},
@@ -416,6 +459,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
 
     def test_parser_uses_named_control_flow_dictionaries(self):
         workflow = {
+            "schema_version": WORKFLOW_SCHEMA_VERSION,
             "input_ports": [],
             "output_ports": [],
             "nodes": [

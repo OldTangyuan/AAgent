@@ -1,6 +1,8 @@
 import { boundaryPorts, createNode, createWorkflowId, NODE_TYPES } from './node-contract.js';
 import { filterValidConnections } from './connection-rules.js';
 
+export const WORKFLOW_SCHEMA_VERSION = '1.1';
+
 const initialNodes = [
   { id: 'input', type: 'input', name: 'Input', x: 52, y: 238 },
   { id: 'output', type: 'output', name: 'Output', x: 310, y: 238 },
@@ -99,6 +101,7 @@ export function deleteNode(id) {
 
 export function workflowSnapshot() {
   return structuredClone({
+    schema_version: WORKFLOW_SCHEMA_VERSION,
     name: state.name,
     description: state.description,
     input_ports: state.input_ports,
@@ -112,6 +115,7 @@ export function workflowSnapshot() {
 
 export function resetWorkflow() {
   return loadSnapshot({
+    schema_version: WORKFLOW_SCHEMA_VERSION,
     name: 'workflow',
     description: '',
     input_ports: [],
@@ -342,6 +346,7 @@ function normalizeNode(node, inputPorts, outputPorts, callableWorkflows, remoteT
 
 export function loadSnapshot(saved, metadata = null) {
   try {
+    if (saved?.schema_version !== WORKFLOW_SCHEMA_VERSION) return false;
     const savedNodes = Array.isArray(saved) ? saved : saved?.nodes;
     if (!Array.isArray(savedNodes)) return false;
     const workflowName = metadata?.name ?? saved?.name;
@@ -400,6 +405,7 @@ export function normalizeImportedWorkflow(imported) {
 export function parseWorkflowText(text) {
   const workflow = normalizeImportedWorkflow(JSON.parse(text));
   if (!workflow || typeof workflow !== 'object' || Array.isArray(workflow)) throw new Error('内容不是有效的 Workflow JSON');
+  if (workflow.schema_version !== WORKFLOW_SCHEMA_VERSION) throw new Error(`Workflow schema_version 必须是 ${WORKFLOW_SCHEMA_VERSION}`);
   if (typeof workflow.name !== 'string' || !workflow.name.trim()) throw new Error('Workflow 名称不能为空');
   if (!Array.isArray(workflow.nodes) || !Array.isArray(workflow.connections)) throw new Error('Workflow 缺少节点或连接数据');
   return workflow;

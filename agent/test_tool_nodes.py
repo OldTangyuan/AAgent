@@ -11,6 +11,7 @@ from workflow_contract import NODE_ARGUMENT_FIELDS_BY_TYPE, SUPPORTED_NODE_TYPES
 from workflow_nodes import workflow_local_tool, workflow_remote_async_tool, workflow_remote_sync_tool
 from workflow_nodes import nodes_map
 from workflow_validator import WorkflowValidationError, validate_workflow
+from workflow_parser import WORKFLOW_SCHEMA_VERSION
 
 
 def tool_workflow_map(node_type: str, **arguments) -> list[dict]:
@@ -42,6 +43,7 @@ def tool_workflow_map(node_type: str, **arguments) -> list[dict]:
 
 def valid_workflow(node: dict) -> dict:
     workflow = {
+        "schema_version": WORKFLOW_SCHEMA_VERSION,
         "input_ports": [],
         "output_ports": [],
         "nodes": [

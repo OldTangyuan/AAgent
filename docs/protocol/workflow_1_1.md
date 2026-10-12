@@ -1,10 +1,10 @@
-# Workflow 1.0 协议规范
+# Workflow 1.1 协议规范
 
 > 类型:设计文档。
 > 性质:现行文档。
 > 归属:`agent/` + `workflow_editor/` + `manager_webui/`。
-> 适用版本:平台 `4.0.0+`。
-> 协议版本:workflow 1.0。
+> 适用版本:平台 `4.0.6+`。
+> 协议版本:workflow 1.1。
 
 本文定义 Workflow 定义的持久化 JSON 契约。版本以仓库根 `version.json.protocol.workflow` 为准。Workflow 不是[Event 1.0](event_1_0.md) 信封；它由编辑器/管理页保存到 MongoDB `workflows`，由 Agent 读取、校验和执行。
 
@@ -14,6 +14,7 @@
 
 ```json
 {
+  "schema_version": "1.1",
   "name": "echo",
   "input_ports": [{"name": "content", "type": "content"}],
   "output_ports": [{"name": "content", "type": "content"}],
@@ -32,6 +33,7 @@
 
 ```json
 {
+  "schema_version": "1.1",
   "name": "answer_question",
   "input_ports": [{"name": "question", "type": "content"}],
   "output_ports": [{"name": "answer", "type": "content"}],
@@ -60,13 +62,14 @@
 
 | 字段 | 类型 | 约束 |
 |---|---|---|
+| `schema_version` | 字符串 | 协议版本，必填，当前只能是 `"1.1"`；缺失或不匹配直接拒绝 |
 | `name` | 字符串 | Workflow 名称；顶层 Event 执行时按 `payload.workflow_id` 指定的 MongoDB `_id` 选中，不按名称路由 |
 | `input_ports` / `output_ports` | 数组 | 每项至少含非空 `name` 和受支持的 `type`；名称在各自列表内不重复 |
 | `nodes` | 数组 | 恰好一个 `input`、至少一个 `output`；节点 `id` 不重复，`type` 必须受支持 |
 | `connections` | 数组 | `fromId`、`fromPortId`、`toId`、`toPortId` 指定端点，`type` 为 `control` 或对应数据类型 |
 | `remote_tools` | 数组，可选 | 远程 Tool 的名称与输入/输出端口声明；远程 Tool 节点须匹配声明 |
 
-管理页还保存描述、版本、引用和时间等元数据；MongoDB `_id` 是存储标识，不属于连线或节点字段。可执行性的依据是 `agent/workflow_validator.py` 中的 `validate_workflow`，管理页保存时另有大小、数量和引用限制。不能只检查 JSON 能否解析就认为 Workflow 有效。
+管理页还保存描述、引用和时间等元数据；MongoDB `_id` 是存储标识，不属于连线或节点字段。协议版本由顶层 `schema_version` 表达，不再有单独的整数版本字段。可执行性的依据是 `agent/workflow_validator.py` 中的 `validate_workflow`，管理页保存时另有大小、数量和引用限制。不能只检查 JSON 能否解析就认为 Workflow 有效。
 
 ## 2. 节点与连线
 
@@ -160,10 +163,14 @@ Agent 的 `parse_workflow` 把持久化定义编译成 `workflow_map`（按原�
 | `data_inputs` | `{端口ID: [来源节点索引, 来源端口ID, 当前值]}` | 未连接时为 `[null, null, null]`；已连接但尚未写入时当前值为 `null` |
 | `data_outputs` | `{端口ID: [[目标节点索引, 目标端口ID], ...]}` | 一个输出端口可连接多个目标；未连接的端口对应空列表 |
 
-执行时数据输出会写入目标 `data_inputs` 的第三项；执行器还可能向节点暂存以 `_` 开头的状态字段。因此 `workflow_map` 是可变的 Agent 内部结构，不应保存回 MongoDB，也不属于 Workflow 1.0 的持久化 JSON 契约。解析器会过滤无效端点连接；必须先调用 `validate_workflow` 校验原始定义，不能用解析成功代替校验。
+执行时数据输出会写入目标 `data_inputs` 的第三项；执行器还可能向节点暂存以 `_` 开头的状态字段。因此 `workflow_map` 是可变的 Agent 内部结构，不应保存回 MongoDB，也不属于 Workflow 1.1 的持久化 JSON 契约。解析器会过滤无效端点连接；必须先调用 `validate_workflow` 校验原始定义，不能用解析成功代替校验。
 
 ## 4. 与 Event 的关系和版本
 
 Agent 从 Event `payload` 中按 Input 端口名称取同名字段，未提供的字段传为 `None`；`workflow_id` 只有在显式声明同名 Input 端口时才成为 Workflow 输入。Workflow 内部 `event` 数据类型可以承载 `event_type` 与 `payload`，不另设协议版本。Workflow 的 Tool 节点直接调用本地执行器或 Tool Server，不由主 Event 队列派发。
 
-Workflow 版本采用独立的 `MAJOR.MINOR`；顶层 `schema_version` 和消费边界的版本检查尚未实施。修改节点/端口契约时，需同批核对编辑器、管理页和 Agent 的解析与校验；版本清单、文档元信息和标签正文在发布时对齐，规则见[版本与归属规范](../版本与归属规范.md)。
+Workflow 版本采用独立的 `MAJOR.MINOR`；顶层 `schema_version` 是 1.1 新增的必填字段，值为 `"1.1"`，1.0 顶层没有该字段。**版本值硬编码在各消费方的源码常量中**（Agent 解析器、Agent 校验器、管理页、编辑器各自声明 `1.1`），不运行时读取 `version.json`——这样改协议时必须显式改代码，不会漏掉。
+
+消费边界的版本检查已落地：Agent 的 `parse_workflow` 与 `validate_workflow` 在入口比对 `schema_version`，管理页保存时校验，编辑器载入/导入时校验；缺失或不匹配一律拒绝，不做兼容与数据迁移。
+
+修改节点/端口契约时，需同批核对编辑器、管理页和 Agent 的解析与校验，并同步提升这里写死的常量；版本清单、文档元信息和标签正文在发布时对齐，规则见[版本与归属规范](../版本与归属规范.md)。
