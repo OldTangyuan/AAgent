@@ -3,7 +3,7 @@
 > 类型:审计报告（分节草稿）。
 > 性质:现行文档。
 > 归属:`agent/`。
-> 适用版本:平台 `4.0.0+`。
+> 适用版本:平台 `4.0.4+`。
 
 > 范围：`agent/` 目录下的运行时进程、Workflow 执行引擎、节点契约与校验、LLM/远程工具接入、持久化与调试入口。
 > 依据：只读源码与测试交叉印证，所有结论附 `文件:行号`。测试通过即视为该行为已被契约固化，测试失败/矛盾处单独标注。
@@ -353,7 +353,7 @@ return result or {}
 | # | 级别 | 缺陷 | 证据 | 影响 |
 | --- | --- | --- | --- | --- |
 | D1 | P0 | `NODE_ARGUMENT_FIELDS_BY_TYPE` **漏了 `map_content_get`** | `workflow_contract.py:17-42` 含该类型，`:51-75` 不含；`workflow_validator.py:178` 用 `NODE_ARGUMENT_FIELDS_BY_TYPE[node_type]` 直接取键 | 任何含 `map_content_get` 的 workflow 在执行期抛 `KeyError`（非 `WorkflowValidationError`）→ 被主循环兜底吞掉、静默失败；同时 `test_tool_nodes.py:240`（集合相等断言）与 `test_workflow_node.py:263-303`（该节点验收用例）必然失败。执行层单测直接调用节点函数、绕过校验器，故此前未暴露 |
-| D2 | P1 | **运行期失败全静默**：节点抛错、校验失败、工具超时、Mongo 抖动都只 `print` + `sleep(2)`，不产出任何事件、不留节点信息 | `task_worker.py:119-122`；`task_worker.py:55`（缺 `payload.workflow_id`→`KeyError`）、`task_worker.py:69`（文档缺 `name`→`KeyError`）同样落入该兜底 | 用户侧表现为"发了没反应"；事件已 `BRPOP` 出队且无重试/死信 → 消息永久丢失；唯一的 `error` 事件只覆盖"workflow not found"一种情形（`task_worker.py:61-64`） |
+| ~~D2~~ | P1 | ~~**运行期失败全静默**：节点抛错、校验失败、工具超时、Mongo 抖动都只 `print` + `sleep(2)`，不产出任何事件、不留节点信息~~ | ✅ **已修复**（2026-10-12）：`task_worker.py:114-124` 单任务边界捕获异常 → 发布 `error`（payload `{message}` + 存在时的 `workflow_id`）；`event_type != "error"` 防递归，异常仍上抛，原 `print` + 堆栈与状态复位不变 | 节点 id 随异常文案带出（如 `workflow_nodes.py` 的 `node {id}`），未单列字段；无重试/死信面未变 |
 | D3 | P1 | **执行器无环检测、无迭代上限、无超时** | `workflow_nodes.py:70-79` 为裸 `while`，无步数/墙钟保护；`workflow_validator.py` 只校验控制端口连通性与单后继，不禁止环 | 画布上任一非 `foreach` 回边即造成无限循环，单线程 worker 停止消费整条队列；每轮可能伴随 LLM/远程工具调用（成本放大）。`foreach` 的 `loop-in/loop-out` 是唯一"正当环"，但无机制区分 |
 | D4 | P1 | **工具注册表被 import 副作用清空**：`tools/tool.py:33` 模块级 `redis_reset_tools()` 直接 `DEL aagent:tools` | `tools/tool.py:26-33`；且 `tools/tool.py:10-24` 用 `os.environ[...]` 强读 `DEEPSEEK_*`/`KIMI_*`/`ZAI_API_KEY`/`TAVILY_API_KEYS`/`BOCHA_*` | 任何 import `tools.tool` 的进程（agent、测试、一次性脚本）都会清掉共享工具目录；agent 只注册 5 个工具（余额×2、Tavily、`output_to_terminal`、`get_recent_records`），而 `aagent:tools` 的读者是 manager_webui/`workflow_editor`；`ZAI_API_KEY`/`BOCHA_*` 被读出但**完全未使用**，缺任一 Key 即启动失败 |
 | D5 | P1 | **`tools/documents.py`、`tools/qqapi.py` 在 agent 进程内是死代码**：全仓 grep 确认 agent 无任何 import（`documents.py:1-2` 反向 import `utils` 与 `tools.tool`，即依赖方向是"死文件依赖活模块"）；`qqapi.py` 仅被 `tool_provider/tools/qq.py:4` 引用；且 `execute_tool` 对未知工具**返回成功字符串**而非报错 | `tools/documents.py:1`、`tools/qqapi.py`、`tools/tool.py:169-171` | `local_tool` 节点引用文档/QQ 工具时，节点"成功"输出 `"未知工具: xxx"` 并继续流转 → 静默错误结果；同理 `llm` 节点的 `tools` 过滤后可能为空集。另：`tools/documents.py:67-74,76-84` 的 `find_one` 结果**未判空**，文档不存在即 `TypeError`；`system_documents_prompt()`（`:166-173`）与 `list_documents()`（`:159-164`）无调用方（除非先补 import） |

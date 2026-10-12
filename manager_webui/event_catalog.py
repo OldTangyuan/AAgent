@@ -91,7 +91,7 @@ EVENT_CATALOG = [
         "event_type": "error",
         "scope": "main_queue",
         "title": "Workflow 错误",
-        "description": "目标 Workflow 不存在时记录错误，不触发后续处理。",
+        "description": "Agent 任务处理失败时记录错误，可由绑定的 Workflow 处理。",
         "producer": "agent/task_worker.py",
         "consumer": "agent/task_worker.py",
         "schema": {
@@ -102,10 +102,10 @@ EVENT_CATALOG = [
                 "event_type": {"const": "error"},
                 "payload": {
                     "type": "object",
-                    "required": ["workflow_id", "message"],
+                    "required": ["message"],
                     "properties": {
                         "workflow_id": {"type": "string"},
-                        "message": {"const": "workflow not found"},
+                        "message": {"type": "string"},
                     },
                     "additionalProperties": False,
                 },

@@ -3,7 +3,7 @@
 > 类型:审计报告。
 > 性质:现行文档。
 > 归属:跨服务。
-> 适用版本:平台 `4.0.0+`。
+> 适用版本:平台 `4.0.4+`。
 
 > 本文档由**代码级审计**产出：逐文件通读 `agent/`、`webui_py/`、`manager_webui/`、`workflow_editor/`、`tool_server/`、`tool_provider/`、`qqbot/`、`qqbot_consumer/` 与部署配置，把每一个功能、每一个 API、每一个按钮与交互、每一个配置项、每一处可插拔边界逐条登记。
 >
@@ -609,7 +609,7 @@ return result or {}
 | # | 级别 | 缺陷 | 证据 | 影响 |
 | --- | --- | --- | --- | --- |
 | ~~D1~~ | ~~P0~~ | ~~`NODE_ARGUMENT_FIELDS_BY_TYPE` **漏了 `map_content_get`**~~ **【已修复】** | 原证据：`workflow_contract.py:17-42` 含该类型，`:51-75` 不含；`workflow_validator.py:178` 用 `NODE_ARGUMENT_FIELDS_BY_TYPE[node_type]` 直接取键 | **已修复**：`:58` 现为 `"map_content_get": set(),`，三处集合（`SUPPORTED_NODE_TYPES` / `NODE_ARGUMENT_FIELDS_BY_TYPE` / `nodes_map`）恢复一致，含该节点的 Workflow 不再抛 `KeyError`。原先必然失败的两例（`test_tool_nodes.py:240` 集合对账、`test_workflow_node.py:263-303` 节点验收）应随之转绿（本轮未复跑） |
-| D2 | P1 | **运行期失败全静默**：节点抛错、校验失败、工具超时、Mongo 抖动都只 `print` + `sleep(2)`，不产出任何事件、不留节点信息 | `task_worker.py:119-122`；`task_worker.py:55`（缺 `payload.workflow_id`→`KeyError`）、`task_worker.py:69`（文档缺 `name`→`KeyError`）同样落入该兜底 | 用户侧表现为"发了没反应"；事件已 `BRPOP` 出队且无重试/死信 → 消息永久丢失；唯一的 `error` 事件只覆盖"workflow not found"一种情形（`task_worker.py:61-64`） |
+| ~~D2~~ | P1 | ~~**运行期失败全静默**：节点抛错、校验失败、工具超时、Mongo 抖动都只 `print` + `sleep(2)`，不产出任何事件、不留节点信息~~ | ✅ **已修复**（2026-10-12）：`task_worker.py:114-124` 单任务边界捕获异常 → 发布 `error`（payload `{message}` + 存在时的 `workflow_id`）；`event_type != "error"` 防递归，异常仍上抛，原 `print` + 堆栈与状态复位不变 | 节点 id 随异常文案带出（如 `workflow_nodes.py` 的 `node {id}`），未单列字段；无重试/死信面未变 |
 | D3 | P1 | **执行器无环检测、无迭代上限、无超时** | `workflow_nodes.py:70-79` 为裸 `while`，无步数/墙钟保护；`workflow_validator.py` 只校验控制端口连通性与单后继，不禁止环 | 画布上任一非 `foreach` 回边即造成无限循环，单线程 worker 停止消费整条队列；每轮可能伴随 LLM/远程工具调用（成本放大）。`foreach` 的 `loop-in/loop-out` 是唯一"正当环"，但无机制区分 |
 | D4 | P1 | **工具注册表被 import 副作用清空**：`tools/tool.py:33` 模块级 `redis_reset_tools()` 直接 `DEL aagent:tools` | `tools/tool.py:26-33`；且 `tools/tool.py:10-24` 用 `os.environ[...]` 强读 `DEEPSEEK_*`/`KIMI_*`/`ZAI_API_KEY`/`TAVILY_API_KEYS`/`BOCHA_*` | 任何 import `tools.tool` 的进程（agent、测试、一次性脚本）都会清掉共享工具目录；agent 只注册 5 个工具（余额×2、Tavily、`output_to_terminal`、`get_recent_records`），而 `aagent:tools` 的读者是 manager_webui/`workflow_editor`；`ZAI_API_KEY`/`BOCHA_*` 被读出但**完全未使用**，缺任一 Key 即启动失败 |
 | D5 | P1 | **`tools/documents.py`、`tools/qqapi.py` 在 agent 进程内是死代码**：全仓 grep 确认 agent 无任何 import（`documents.py:1-2` 反向 import `utils` 与 `tools.tool`，即依赖方向是"死文件依赖活模块"）；`qqapi.py` 仅被 `tool_provider/tools/qq.py:4` 引用；且 `execute_tool` 对未知工具**返回成功字符串**而非报错 | `tools/documents.py:1`、`tools/qqapi.py`、`tools/tool.py:169-171` | `local_tool` 节点引用文档/QQ 工具时，节点"成功"输出 `"未知工具: xxx"` 并继续流转 → 静默错误结果；同理 `llm` 节点的 `tools` 过滤后可能为空集。另：`tools/documents.py:67-74,76-84` 的 `find_one` 结果**未判空**，文档不存在即 `TypeError`；`system_documents_prompt()`（`:166-173`）与 `list_documents()`（`:159-164`）无调用方（除非先补 import） |
@@ -4506,7 +4506,7 @@ WebUI 对 pending 列表的删除/编辑按 `LINDEX -position` + `LSET` + `LREM`
 | R-47 | ~~配置权威来源（Redis vs 文件，`SET NX`）（A-09）~~ **【已关闭】** | `归档/架构问题汇总.md:35`；`2026-09-14` M-08 —— **核验报告 §4.1 与 §6 判定 A-09 = GONE：`initialize_settings` / `set_settings` / `read_settings_file` / `aagent:settings` / `agent/settings.json` 全部不存在，"谁是权威"的取舍前提整体消失** | 缺陷 | **已关闭** | 否 |
 | R-48 | Redis 连接参数统一（密码与 `socket_timeout`）（A-10） | `归档/架构问题汇总.md:36`；同项 `2026-09-14` M-21/M-22；汇总报告 §5 A-10 与条目 7（**仍需决策**） | 缺陷 | P1 | 否 |
 | R-49 | Python 版本与依赖锁定策略（A-11） | `归档/架构问题汇总.md:37`；汇总报告 §5 A-11 与条目 47（**仍需决策**） | 重构 | P1 | 否 |
-| R-50 | 主 worker 缺少失败反馈（节点失败静默中断） | `归档/2026-09-14-全项目-问题报告.md:60-95`（F-02，本轮复核 `agent/task_worker.py:96-122` 仍在）；汇总报告条目 2 | 缺陷 | 高 | 否 |
+| R-50 | ~~主 worker 缺少失败反馈（节点失败静默中断）~~ | ✅ **已修复**（2026-10-12）：F-02 已关闭，`agent/task_worker.py:114-124` 发布 `error`（汇总报告 §2.1 条目 2） | 缺陷 | 高 | 否 |
 | R-51 | 未知 `event_type` 的可诊断处理（缺 `payload` 时 `KeyError`） | `归档/2026-09-14-全项目-问题报告.md:327-350`（H-07；`handle_map` 已删除，改为绑定查询，仍未判空） | 缺陷 | 中 | 否 |
 | R-52 | 事件与队列写入路径无体积限制 | `归档/2026-09-14-全项目-问题报告.md:387-391`；同项 `2026-09-13` R3；汇总报告条目 19 | 缺陷 | 中 | 否 |
 | R-53 | `request_body_guard` 只信 `content-length` | `归档/2026-09-14-全项目-问题报告.md:509-513`；同项 `2026-09-13` W3 | 缺陷 | 中 | 否 |
@@ -4570,7 +4570,7 @@ WebUI 对 pending 列表的删除/编辑按 `LINDEX -position` + `LSET` + `LREM`
 | 编号 | 结论 | 状态 |
 | --- | --- | --- |
 | F-01 | LLM 节点 `model` 参数运行时被完全忽略 | **已修复**：`agent/workflow_nodes.py:130-132` 传入 `node_argument(node, "model")`，`agent/llm.py:11-36,65-78` 按 `_id` 读 Mongo 模型集合 |
-| F-02 | 节点执行异常静默中断，无失败反馈 | **仍成立**：`agent/task_worker.py:56-93` 无节点级 try/except，异常仍冒泡至 `:119-122` 只打印（R-50） |
+| F-02 | 节点执行异常静默中断，无失败反馈 | **已修复**（2026-10-12）：`agent/task_worker.py:114-124` 在单任务边界发布 `error` 后再上抛，R-50 一并关闭 |
 | F-03 | 子 Agent 回发链路不闭环，群消息发不出 | **已移除**：全仓 `*.py` 检索 `rpc_apply`/`rpc_review` 零匹配，链路整体删除 |
 | F-04 | LLM 无文本输出时 `output → tool_call` 主链路必失败 | **已失效**：`tool_call` 节点已删除（`docs/19:65`、`agent/workflow_contract.py:17-42` 无该类型），`tool_calls` 改为 list-content 输出（`agent/workflow_nodes.py:136-142`）；但 `None` 语义问题转入 R-21 |
 | H-01 | QQ 子 Agent 队列 LIFO | **仍成立**：`qqbot_consumer/queue_client.py:19,25` 为 `lpush` + `blpop`（README 把它写成"当前值"） |
@@ -4679,6 +4679,8 @@ except Exception as e:
 ```
 
 **静默吞掉**。后果：事件在 `BRPOP` 时已出队、不发任何 `error`/`response`、无重试、无死信 → 用户侧表现为"消息发出去了，永远没反应"，而日志里只有一行 `KeyError`。
+
+> **2026-10-12 更新**：此处描述的"静默吞掉"已关闭——`agent/task_worker.py:114-124` 在单任务边界发布 `error` 后再上抛（`汇总报告` §2.1 条目 2 已随之关闭）。上面这段保留为当时的成因分析。
 
 **为什么这条特别值得单列**：它是"三个子系统各自内部自洽、组合起来才致命"的典型。前端审计会认为契约完整，后端审计才看得到缺项，而只有把两边对齐才能确认**用户真的能在 UI 里做出一个必然崩溃的 Workflow**。
 

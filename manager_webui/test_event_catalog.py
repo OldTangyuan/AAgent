@@ -20,7 +20,11 @@ class EventCatalogTest(unittest.TestCase):
 
         self.assertEqual(items["workflow"]["schema"]["properties"]["payload"]["required"], ["workflow_id"])
         self.assertEqual(
-            items["error"]["schema"]["properties"]["payload"]["required"], ["workflow_id", "message"]
+            items["error"]["schema"]["properties"]["payload"]["required"], ["message"]
+        )
+        self.assertEqual(
+            items["error"]["schema"]["properties"]["payload"]["properties"]["message"],
+            {"type": "string"},
         )
 
     def test_each_schema_identifies_its_event_type_and_payload(self):

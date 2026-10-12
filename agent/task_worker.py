@@ -111,6 +111,17 @@ def main():
             })
             try:
                 handle_task(task)
+            except Exception as error:
+                if task.get("event_type") != "error":
+                    payload = {"message": str(error)}
+                    workflow_id = task.get("payload", {}).get("workflow_id")
+                    if workflow_id is not None:
+                        payload["workflow_id"] = workflow_id
+                    publish_to_queue(MAIN_AGENT_QUEUE_NAME, {
+                        "event_type": "error",
+                        "payload": payload,
+                    })
+                raise
             finally:
                 set_worker_status({
                     "state": "idle",

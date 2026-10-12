@@ -132,6 +132,76 @@ class WorkerRoutingTest(unittest.TestCase):
             task_worker.handle_task({"event_type": "workflow", "payload": {"workflow_id": "bad"}})
         publish.assert_not_called()
 
+    @patch("task_worker.time.sleep", side_effect=KeyboardInterrupt)
+    @patch("task_worker.traceback.print_exc")
+    @patch("task_worker.print")
+    @patch("task_worker.set_worker_status")
+    @patch("task_worker.publish_to_queue")
+    @patch("task_worker.handle_task", side_effect=ValueError("node failed"))
+    @patch("task_worker.pop_from_queue", return_value={"event_type": "workflow", "payload": {"workflow_id": "selected"}})
+    def test_workflow_failure_publishes_error_and_resets_status(
+        self, pop, handle, publish, set_status, log, print_exc, sleep
+    ):
+        with self.assertRaises(KeyboardInterrupt):
+            task_worker.main()
+        publish.assert_called_once_with(task_worker.MAIN_AGENT_QUEUE_NAME, {
+            "event_type": "error",
+            "payload": {"workflow_id": "selected", "message": "node failed"},
+        })
+        self.assertEqual(set_status.call_args.args[0]["state"], "idle")
+        print_exc.assert_called_once()
+
+    @patch("task_worker.time.sleep", side_effect=KeyboardInterrupt)
+    @patch("task_worker.traceback.print_exc")
+    @patch("task_worker.print")
+    @patch("task_worker.set_worker_status")
+    @patch("task_worker.publish_to_queue")
+    @patch("task_worker.run_workflow_map", side_effect=ValueError("node failed"))
+    @patch("task_worker.parse_workflow", return_value=[{"type": "input", "workflowPorts": []}])
+    @patch("task_worker.validate_workflow")
+    @patch("task_worker._read_workflow", return_value={"name": "example"})
+    @patch("task_worker.record_history")
+    @patch("task_worker.pop_from_queue", return_value={"event_type": "workflow", "payload": {"workflow_id": "selected"}})
+    def test_node_failure_reaches_error_event(
+        self, pop, record, read, validate, parse, run, publish, set_status, log, print_exc, sleep
+    ):
+        with self.assertRaises(KeyboardInterrupt):
+            task_worker.main()
+        publish.assert_called_once_with(task_worker.MAIN_AGENT_QUEUE_NAME, {
+            "event_type": "error", "payload": {"workflow_id": "selected", "message": "node failed"},
+        })
+
+    @patch("task_worker.time.sleep", side_effect=KeyboardInterrupt)
+    @patch("task_worker.traceback.print_exc")
+    @patch("task_worker.print")
+    @patch("task_worker.set_worker_status")
+    @patch("task_worker.publish_to_queue")
+    @patch("task_worker.read_bound_workflow_id", side_effect=RuntimeError("binding unavailable"))
+    @patch("task_worker.record_history")
+    @patch("task_worker.pop_from_queue", return_value={"event_type": "terminal", "payload": {}})
+    def test_binding_failure_publishes_error_without_workflow_id(
+        self, pop, record, read_bound, publish, set_status, log, print_exc, sleep
+    ):
+        with self.assertRaises(KeyboardInterrupt):
+            task_worker.main()
+        publish.assert_called_once_with(task_worker.MAIN_AGENT_QUEUE_NAME, {
+            "event_type": "error", "payload": {"message": "binding unavailable"},
+        })
+
+    @patch("task_worker.time.sleep", side_effect=KeyboardInterrupt)
+    @patch("task_worker.traceback.print_exc")
+    @patch("task_worker.print")
+    @patch("task_worker.set_worker_status")
+    @patch("task_worker.publish_to_queue")
+    @patch("task_worker.handle_task", side_effect=ValueError("error handler failed"))
+    @patch("task_worker.pop_from_queue", return_value={"event_type": "error", "payload": {}})
+    def test_failed_error_handler_does_not_publish_recursively(
+        self, pop, handle, publish, set_status, log, print_exc, sleep
+    ):
+        with self.assertRaises(KeyboardInterrupt):
+            task_worker.main()
+        publish.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

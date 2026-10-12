@@ -34,7 +34,7 @@
 ## 组 2
 
 - 21 | F-01 | FIXED | `agent/workflow_nodes.py:131` `chat_with_model(messages, node_argument(node,"model"), tools=tools)`；`agent/llm.py:11-36` `_model_config(model_id)` 从 `MONGO_MODEL_COLLECTION`（默认 models）取 `config["model"]/base_url/api_key` 再调 `openai_llm_api` | 已按节点 model 解析，不再走 `chat_with_deepseek` 进程级 env
-- 22 | F-02/R1 | STILL | `agent/task_worker.py:89` `output = run_workflow_map(...)` 无 try/except（唯一 error 事件在 `:61-64` 的 workflow not found）；`agent/workflow_nodes.py:67-87` 只有 try/finally（finally 仅清 Context）| 执行期异常冒泡到 `agent/task_worker.py:119-122` print + sleep(2)，无失败事件
+- 22 | F-02/R1 | **FIXED** | ~~`agent/task_worker.py:89` `output = run_workflow_map(...)` 无 try/except（唯一 error 事件在 `:61-64` 的 workflow not found）；`agent/workflow_nodes.py:67-87` 只有 try/finally（finally 仅清 Context）~~ | **2026-10-12 已修复**：`agent/task_worker.py:114-124` 在单任务边界捕获异常并发布 `error`（payload `{message}` + 存在时的 `workflow_id`）后再上抛；外层 print + `sleep(2)` 仅作日志兜底；处理 `error` 事件自身失败时不重复发布
 - 23 | F-04/第3节-6 | STILL | 同第 8 条：`agent/workflow_nodes.py:31` 用 `is not None`；`agent/llm.py:59-61` 不归一化 None/""；`agent/workflow_nodes.py:130-142` 两类输出空值语义不一致 | 未修
 - 24 | F-03/R2 | GONE | 全仓 .py grep `rpc_apply|rpc_review` 零命中；`agent/task_worker.py:43-93` 只有 workflow 分支，无这两个处理器；`qqbot_consumer/llm.py` 不存在（该目录只剩 queue_consumer.py/history_repository.py/queue_client.py）| 回发链整体消失
 - 25 | H-01/A-01 | STILL | `qqbot/queue_client.py:19` publish=lpush、`qqbot_consumer/queue_client.py:25` pop=blpop（栈序，与先入先出相反）；`agent/queue_client.py:33` lpush + `:65` brpop（FIFO）| 子队列方向仍错配
@@ -77,7 +77,7 @@
 - 62 | N1 | FIXED | `qqbot_consumer/queue_consumer.py:24-29` 仅当 `post_type=='message'`、无 group_id 且 `user_id == QQ_TARGET_USER_ID` 才 publish 到主队列；未授权消息只落 `qq_event_history`（`:21`），不再进入 LLM 上下文（旧 active 投影整体删除）
 - 63 | N3 | GONE | `response→tool→tool_return→active` 链不存在（全仓 .py 无 tool_return/active），迭代上限保护无对象
 - 64 | N11 | STILL | `agent/tools/tool.py:168-171` `handler is None → return f"未知工具: {tool}"`（返回字符串而非抛错），`:173-180` 一律 `str(result)` 成"成功结果"
-- 65 | N12/A1 | STILL | 请求异常在 `agent/llm.py:46-57` 直接上抛 → `agent/workflow_nodes.py:130` 无捕获 → `agent/task_worker.py:119-122` 只 print + sleep(2) | 事件已 `record_history` 但无 error 事件、不重试、不重新入队
+- 65 | N12/A1 | STILL | 请求异常在 `agent/llm.py:46-57` 直接上抛 → `agent/workflow_nodes.py:130` 无捕获 → `agent/task_worker.py:119-122` 只 print + sleep(2) | 事件已 `record_history`；**2026-10-12 起不再“无 error 事件”**（`agent/task_worker.py:114-124` 会发 `error`），但仍不重试、不重新入队
 - 66 | N13 | MOVED | `agent/llm.py:55-56` 402 返回 `(402,None,None)`，`:75-76` 归一成 content 字符串 `"[-]余额不足"` 走正常 response 路径 | 无独立 error 事件、无 QQ/终端定向回推，只是不再静默丢
 - 67 | N14 | GONE | 全仓 .py 无 `setting` 事件类型/handler（agent 侧 grep `setting` 零命中，webui_py 无 settings 路由）| 待校验对象不存在
 - 68 | N4 | GONE | `agent/prompt/` 目录不存在；仓库根 `skills/` 存在（.txt/.md），但全仓 .py/.js/.yml grep `skills` 零命中 | 无消费者
