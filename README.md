@@ -64,6 +64,8 @@ Provider 在线状态、工具目录和任务流水都在这里看。
 
 ![Tool Server 控制台](docs/images/tool-server.png)
 
+Tool Server 的详细介绍、接口配置与调用示例、完整功能演示图,见 [`tool_server/README.md`](tool_server/README.md)。
+
 ## 架构
 
 ```mermaid
