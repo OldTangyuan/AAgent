@@ -39,7 +39,7 @@
 | 本文出现的写法 | 实际指向 | 注意 |
 | --- | --- | --- |
 | `归档/2026-10-11-全项目-审查报告.md:27-33` 等 | `docs/审查日志/归档/…` | **行号是归档件自身的行号**。归档说明声明"归档里的 `file:line` 全部作废"，指的是**重构前的旧行号**；下文引用的行号已逐条按归档件正文复核 |
-| `汇总报告` | `docs/审查日志/汇总报告.md` | **当前唯一的问题清单**（52 条）。查"现在要修什么"只看它 |
+| `汇总报告` | `docs/review/4_0_5a.md` | **当前唯一的问题清单**（只列待办：51 条 + 9 个待决策点；编号沿用 1–55，空缺号=已做完）。旧位置 `docs/审查日志/汇总报告.md` 已归档为 `docs/审查日志/归档/2026-10-12-全项目-问题汇总.md`。查"现在要修什么"只看它 |
 | `核验报告` | `docs/审查日志/核验报告.md` | 历史 221 条问题的逐条判定（STILL / FIXED / GONE / MOVED）与当前 `file:line` |
 | `架构问题汇总` | `docs/审查日志/归档/架构问题汇总.md` | **已归档**。其 A-01～A-11 中有 2 条（A-03、A-09）已随重构消失、不再需要决策；其余 9 条仍成立，见 `汇总报告` §5 |
 
@@ -153,7 +153,7 @@ flowchart LR
 | `qq` | QQ listener（经 consumer 筛选） | 主 worker | 命中绑定时透传 payload 并发布 `workflow` | 是 |
 | `terminal` | WebUI `POST /api/terminal` | 主 worker | 同上 | 是 |
 | `workflow` | 主 worker 绑定路由 | 主 worker | 按 `payload.workflow_id` 执行 Workflow | 否（内部） |
-| `response` | `workflow` handler | 主 worker | 最终输出写历史 + 终端历史接口 | **是**（与文档声明相反，见 §8.7） |
+| `response` | `workflow` handler | 主 worker | 最终输出写历史 + 终端历史接口 | **是**（见 §8.7） |
 | `error` | `workflow` handler | 主 worker | 目标 Workflow 不存在时记错误 | **是**（同上，见 §8.7） |
 | `async_result` | Tool Server callback | 主 worker（需一条启用绑定，见 §8.15）或专用消费者 | 异步工具终态通知 | **是** |
 | `raw` | WebUI 展示层 | — | **仅展示用**，无法解析为 JSON 对象时的包装类型，不是 worker 协议 | 否 |
@@ -274,7 +274,7 @@ Event 信封（`docs/20-Event协议与流转.md:13-27`）：
 | `agent/tools/qqapi.py` | 82 | QQ HTTP API 封装 | 否（仅被 `tool_provider/tools/qq.py:4` import） |
 | `agent/tools/1.py` | 269 | B 站搜索页 `window.__pinia` 解析实验脚本 | 否（有 `__main__`，会联网并写 `1.txt`） |
 | `agent/test_*.py`（**6 个**） | 2047 | 契约测试（事件路由/节点/工具/两个仓储） | 否 |
-| `agent/downloaded/` | 226 个文件 | `.m4s`/`.mp3` 音视频产物（含一批 `.m4s` 与对应 mp3）。**注**：另一次统计（`汇总报告` 条目 48 / `_核验/D`）glob 得 174 个，两次数值不一致、未定案；字节总量旧报告称 628.9 MB，本轮未复算 | 否 |
+| `agent/downloaded/` | **174 个文件 / 628.9 MB** | `.m4s`/`.mp3` 音视频产物（含一批 `.m4s` 与对应 mp3）。2026-10-12 复算：`.m4s` 90 + `.mp3` 84 = 174 个、合计 628.9 MB，与 `汇总报告` 条目 48 / `_核验/D` 的 glob 口径一致；此前记录的"226 个文件"是另一口径、已作废 | 否 |
 
 依赖仅 5 项且未锁版本：`pymongo / requests / redis / ffmpeg-python / pydub`（`agent/requirements.txt:1-5`）；基镜像 `python:3.11-slim-bookworm`（`agent/Dockerfile:1`）。
 
@@ -4161,7 +4161,7 @@ WebUI 对 pending 列表的删除/编辑按 `LINDEX -position` + `LSET` + `LREM`
 | --- | --- | --- | --- |
 | D-01 | **高** | `qqbot_consumer` 声称可重试，实际 at-most-once，异常时静默丢事件 | `queue_consumer.py:49` vs `:40`、`queue_client.py:23-26` |
 | D-02 | **高** | 未授权用户私聊消息被投递并**无条件存档**（授权判定在存档之后） | `queue_consumer.py:21` 先于 `:27`；`qqbot/listener.py:31-42` 无用户过滤 |
-| D-03 | **高** | `response` / `error` 实际参与绑定路由，与文档「不参与」冲突，可构成事件回环 | `agent/task_worker.py:46-52`、`test_task_worker.py:63-73` vs `docs/20:78`、`docs/24:14` |
+| ~~D-03~~ | ~~**高**~~ **文档面已关闭** | `response` / `error` 实际参与绑定路由，**可构成事件回环**（仍成立）；原判「与文档冲突」部分**已改正**：`docs/20:86`、`docs/24:19` 现写明"当前只有 `workflow` 不参与绑定路由" | `agent/task_worker.py:46-52`、`test_task_worker.py:63-73`；`docs/20:86`、`docs/24:19` |
 | D-04 | **中** | `QQ_TARGET_USER_ID` 在 listener 中被读入即弃（死变量），但被 `os.environ[]` 强读 → 缺变量时监听器崩溃，配置了也无过滤作用 | `qqbot/listener.py:14`（全文件唯一引用） |
 | D-05 | **中** | 无幂等：`message_id` 等字段被丢弃且无唯一索引，重放会二次存档 + 二次执行 | `qqbot/listener.py:33-42`、`qqbot_consumer/history_repository.py:25-26` |
 | D-06 | **中** | `inputing` 噪音永久落库，集合无 TTL 索引 | `qqbot/listener.py:23-30`、`queue_consumer.py:21,30-31`、`history_repository.py:25-26` |
@@ -4287,7 +4287,7 @@ WebUI 对 pending 列表的删除/编辑按 `LINDEX -position` + `LSET` + `LREM`
 | 核心命题 | 定义当前 Workflow + Tool Server 架构下 Event 的类型、JSON 格式、队列方向与完整运行路径（`docs/20:3-9`）。 |
 | 关键设计决定 | 主队列 `LPUSH` + `BRPOP`（FIFO），终端 `RPUSH` 插队（`docs/20:50-52`）；QQ 队列 `LPUSH` + `BLPOP`（LIFO，`docs/20:38-39`）；`workflow` / `response` / `error` 为内部事件（`docs/20:25`）；未绑定事件只落历史（`docs/20:27`）；payload 中不存在的字段以 `None` 传播并被运行时判为"没有值"（`docs/20:176`）。 |
 | 实现程度 | **已落地**：`workflow` / `response` / `error` 三条链（`agent/task_worker.py:43-93`）、终端 4000 字符与 `files` 为空约束、入口按端口名取 payload 字段（`agent/task_worker.py:83-87`）。 |
-| 与源码差异 | `docs/20:78` 写"`response` / `error` 不参与绑定路由"，但 `agent/task_worker.py:46-53` 对除 `workflow` 外的**所有** `event_type` 都做绑定查询，`agent/test_task_worker.py:66-74` 明确断言 `response` / `error` 有绑定时会触发 Workflow。 |
+| 与源码差异 | **已消除**：`docs/20:78` 原文"`response` / `error` 不参与绑定路由"已改为 `docs/20:86` 的"当前只有 `workflow` 不参与绑定路由"，与 `agent/task_worker.py:46-53`（对除 `workflow` 外**所有** `event_type` 都做绑定查询）及 `agent/test_task_worker.py:66-74` 一致。 |
 | 开放扩展点 | 新增事件类型的六项检查表（`docs/20:305-312`）；`async_result` 回调接入（**推荐路线 A：主队列 + 一条绑定**，见 §8.15；`docs/20:247` 的"必须专用消费者"要求已过时）；事件格式统一入口（见 `架构问题汇总` A-08）。 |
 
 ### 7.3.5 21-Workflow Context 节点设计
@@ -4327,7 +4327,7 @@ WebUI 对 pending 列表的删除/编辑按 `LINDEX -position` + `LSET` + `LREM`
 | 核心命题 | 记录已实现的绑定路由行为：每个事件类型至多绑定一个 Workflow，`workflow_id` 由路由写入且不可被原 payload 覆盖（`docs/24:3,7-14,40`）。 |
 | 关键设计决定 | 删除 `_id = "agent"` 全局 `workflow_id` 回退，路由只由绑定决定（`docs/24:12`）；绑定查询失败 ≠ 未绑定（`docs/24:11`）；目标不存在时恰好发布一个 `error`、不发布 `response`（`docs/24:44-58`）；`workflow_id` 可作为输入端口被读取，也可不声明（`docs/24:42`）。 |
 | 实现程度 | **已落地**，与源码逐条一致：`agent/task_worker.py:21-41`（按 event_type 查启用绑定）、`agent/task_worker.py:49-52`（覆盖 `workflow_id`）、`agent/task_worker.py:58-65`（目标不存在发 `error`）、`agent/test_task_worker.py:13-130`。 |
-| 与源码差异 | 唯一显著偏差：`docs/24:14` 写"`workflow`、`response`、`error` 是内部事件，不走上述绑定路由"，与源码（只排除 `workflow`）和既有测试相反。 |
+| 与源码差异 | **已消除**：`docs/24:14` 原文"`workflow`、`response`、`error` 是内部事件，不走上述绑定路由"已改为 `docs/24:19` 的"当前只有 `workflow` 不走绑定路由；`response`、`error` 也会查绑定"，与源码（只排除 `workflow`）和既有测试一致。 |
 | 开放扩展点 | 该文档自我定位为"已实现行为记录"（`docs/24:3`），未声明后续扩展；绑定与 Workflow 改名 / 删除的一致性仍是开放问题（`归档/2026-10-11-全项目-审查报告.md:60`）。 |
 
 ### 7.3.9 25-Session 管理页双模式编辑设计
@@ -4358,7 +4358,7 @@ WebUI 对 pending 列表的删除/编辑按 `LINDEX -position` + `LSET` + `LREM`
 
 | 编号 | 扩展槽 | 出处 | 性质 | 现状 |
 | --- | --- | --- | --- | --- |
-| E-01 | 任意 `event_type` + 启用绑定 → `workflow` 事件 | `docs/24:7-14`；`docs/20:78` | 已开放 | 路由对除 `workflow` 外全部类型生效（`agent/task_worker.py:46-53`） |
+| E-01 | 任意 `event_type` + 启用绑定 → `workflow` 事件 | `docs/24:12-19`；`docs/20:86` | 已开放 | 路由对除 `workflow` 外全部类型生效（`agent/task_worker.py:46-53`） |
 | E-02 | 新适配器直接构造标准 `workflow` Event 写主队列 | `README.md:10,93` | 已开放 | 无需改执行器；payload 字段与 Input 端口同名即可 |
 | E-03 | 新事件源适配器（Webhook / 定时 / 业务系统） | `README.md:10,74` | 预留未用 | 图中标为 `Future`，无实现 |
 | E-04 | QQ / Terminal 适配器作为可替换实现 | `README.md:14,94-95` | 已开放 | 两个实现并存，语义不同（LIFO 排队 vs RPUSH 插队） |
@@ -4537,7 +4537,7 @@ WebUI 对 pending 列表的删除/编辑按 `LINDEX -position` + `LSET` + `LREM`
 | R-78 | 思考分支与语义合并 | `docs/废弃旧文档/05-路线图与创新.md:232` | 功能 | — | 是 |
 | R-79 | Pre-Tool 工具分组与 Content Package 内容包 | `docs/废弃旧文档/05-路线图与创新.md:24-25,397` | 功能 | — | 是 |
 | R-80 | Chat 页面回显 Agent 最终 `response` 与工具调用过程 | `docs/废弃旧文档/05-路线图与创新.md:104-106` | 功能 | — | 否（标注"部分实现，尚未完成"） |
-| R-81 | 全局/激活 Workflow 回退（已被绑定路由取代） | `docs/24:12`；`docs/20:78` | 重构 | 已关闭 | 否 |
+| R-81 | 全局/激活 Workflow 回退（已被绑定路由取代） | `docs/24:17`；`docs/20:86` | 重构 | 已关闭 | 否 |
 | R-82 | `_id="agent"` 全局设置读取逻辑删除 | `docs/24:12` | 重构 | 已关闭 | 否 |
 
 > 计数：上表 **82** 项，其中**已关闭 8 项**（**R-12、R-14 已修复**；R-41 / R-47 / R-68 / R-69 因对象已随重构删除而关闭；R-81 / R-82 保留在表内以标记"曾经的路线图项已被绑定路由取代"），**纯设想 12** 项。已关闭项保留在表内并在状态列标注，以免按旧编号重复排查。
@@ -4548,7 +4548,7 @@ WebUI 对 pending 列表的删除/编辑按 `LINDEX -position` + `LSET` + `LREM`
 
 ### 2026-10-11 全项目审查报告（最新快照；A1、A3 已修复，A2、A4 仍未修复）
 
-> 来源文件已归档：实际路径为 `docs/审查日志/归档/2026-10-11-全项目-审查报告.md`，下表引用的 `:行号` 属该件自身行号。**当前问题清单以 `docs/审查日志/汇总报告.md` 为准。**
+> 来源文件已归档：实际路径为 `docs/审查日志/归档/2026-10-11-全项目-审查报告.md`，下表引用的 `:行号` 属该件自身行号。**当前问题清单以 `docs/review/4_0_5a.md` 为准。**
 
 | 编号 | 结论 | 本轮复核 |
 | --- | --- | --- |
@@ -4612,7 +4612,7 @@ WebUI 对 pending 列表的删除/编辑按 `LINDEX -position` + `LSET` + `LREM`
 
 | 编号 | 文档主张 | 源码事实 | 影响 |
 | --- | --- | --- | --- |
-| D-01 | `docs/24:14`：`workflow`、`response`、`error` 是内部事件，不走绑定路由，避免内部事件再次触发自身；`docs/20:78`：`response` / `error` 不参与绑定路由 | `agent/task_worker.py:46` 只排除 `workflow`，`response` / `error` 同样查绑定；`agent/test_task_worker.py:66-74` 断言二者有绑定时会触发 Workflow | **严重**。按文档理解事件安全边界会得出相反结论；若为 `response` 建绑定会形成自触发链 |
+| ~~D-01~~ | ~~`docs/24:14`：`workflow`、`response`、`error` 是内部事件，不走绑定路由，避免内部事件再次触发自身；`docs/20:78`：`response` / `error` 不参与绑定路由~~ **【已修复】** `docs/20:86` 与 `docs/24:19` 现均写明只有 `workflow` 不参与绑定路由 | `agent/task_worker.py:46` 只排除 `workflow`，`response` / `error` 同样查绑定；`agent/test_task_worker.py:66-74` 断言二者有绑定时会触发 Workflow | 文档面已消除（见 §8.12 注销）。**行为面不变**：为 `response` 建绑定仍会形成自触发链，现由 `docs/20:35`、`docs/24:19` 明示 |
 | D-02 | `docs/19:275`：`remote_async_tool` 保存时"不允许出现 `mode` 或 `callback` arguments" | `agent/workflow_contract.py:67` 允许 `callback`；`agent/workflow_validator.py:375-392` 完整校验 callback 结构；`docs/19:163-165` 与 `docs/20:214-222` 亦描述 callback 能力 | **严重**。文档自相矛盾，实施者若按 §5.2 删掉校验会破坏已落地的回调配置 |
 | D-03 | `docs/23:34`：`workflow_context_repository.py` 的 `_valid_value` 未处理 `event` / `list-event`，须先解决该差异才能复用为六类型校验器 | `agent/workflow_context_repository.py:49-52` 已处理 `event` 与 `list-event` | **高**。会诱导实现者重复修补已完成的类型校验 |
 | D-04 | `docs/22:52-61`：`deserialize_json` 的 `type` 支持六种类型（不含 `map-content`） | `agent/workflow_nodes.py:257-258` 支持 `map-content`；`docs/26:71` 亦要求支持 | **高**。按 22 号文档实现会漏掉 `map-content` 分支 |
@@ -4799,14 +4799,14 @@ def handle_task(e: dict):
 | 事实 | 依据 |
 | --- | --- |
 | `response` / `error` 也会走绑定查询 | `agent/task_worker.py:46` |
-| 文档称二者不参与绑定路由 | `docs/20-Event协议与流转.md:78`、`docs/24-Event绑定与Workflow路由设计.md:14` |
+| ~~文档称二者不参与绑定路由~~ **（已改正）**：现两处均写明只有 `workflow` 不参与 | `docs/20-Event协议与流转.md:86`、`docs/24-Event绑定与Workflow路由设计.md:19` |
 | 测试**断言**二者命中绑定时会触发 Workflow | `agent/test_task_worker.py:66-74` |
 
 **因果链（真实的失控路径）**：给 `response` 建一条绑定 → Workflow 执行完发出 `response` → worker 取出 `response` → 命中绑定 → 投出 `workflow` → 再执行 → 再发 `response` → **无限循环**，而 `run_workflow_map` 本身无环检测、无迭代上限（`agent/workflow_nodes.py:70-79`）。这条环**跨事件、跨队列**，比图内的回边更难发现，且单线程 worker 一旦进入就停止消费整条队列。
 
-**为什么单章看不见**：第 1 章按 `event_type` 列分发映射，第 2/3 章的绑定页只校验"Workflow 存在"，第 7 章从文档读到"response/error 不参与路由"。三处各自都自洽，**只有把 `task_worker.py:46` 的这一个 `!=` 与文档声明对齐才会暴露**。
+**为什么单章看不见**：第 1 章按 `event_type` 列分发映射，第 2/3 章的绑定页只校验"Workflow 存在"，第 7 章当时从文档读到"response/error 不参与路由"。三处各自都自洽，**只有把 `task_worker.py:46` 的这一个 `!=` 与文档声明对齐才会暴露**。
 
-> 归属：第 7 章漂移 D-01 提出，本章独立复核并补出失控后果。既有审查报告未登记此后果。
+> 归属：第 7 章漂移 D-01 提出，本章独立复核并补出失控后果。既有审查报告未登记此后果。**后续进展**：D-01 的文档面已修复（`docs/20:86`、`docs/24:19` 现写明只有 `workflow` 不参与绑定路由），本条作为**行为面结论继续成立**，见 §8.12 注销记录。
 
 ---
 
@@ -4840,7 +4840,7 @@ def handle_task(e: dict):
 | `docs/审查日志/归档/2026-09-14-全项目-问题报告.md:210` | 把 `PUT /api/settings` 列为可改写项 | 该文件**已归档**；所指向的接口不存在 |
 | `docs/审查日志/归档/2026-09-14-全项目-问题报告.md:316` | 称三特性"不生效"——**口径已过期**，实际是代码不存在 | 同上 |
 
-**为什么这条最危险**：它让"未决问题清单"整体失真。`归档/架构问题汇总.md` 里 A-09、`归档/2026-09-14` 里的相关条目**都不是待决策问题，而是已消失的对象**；按报告去排查会一直找不到代码。**当前还有哪些问题，以 `docs/审查日志/汇总报告.md` 为准**——它已把 A-09 归入"已整体失效"。
+**为什么这条最危险**：它让"未决问题清单"整体失真。`归档/架构问题汇总.md` 里 A-09、`归档/2026-09-14` 里的相关条目**都不是待决策问题，而是已消失的对象**；按报告去排查会一直找不到代码。**当前还有哪些问题，以 `docs/review/4_0_5a.md` 为准**——它已把 A-09 归入"已整体失效"。
 
 > 归属：第 2 章发现线索（webui_py 无 settings 路由），本章独立全仓检索确认；第 7 章漂移节需据此升级口径。
 
@@ -4909,7 +4909,7 @@ provider_id = next(item["provider_id"] for item in tools if item["name"] == tool
 
 **判断口径**：`归档/2026-10-11-全项目-审查报告.md` 是在容器内跑过测试的**最新全项目快照**（**文件已归档**，其 `file:line` 属该件自身行号）。该快照的四项生产缺陷中，**A1 与 A3 已修复**，**A2、A4 在本次静态复核中仍然成立**。而更早的 `归档/2026-09-14-全项目-问题报告.md`、`归档/2026-09-13-全项目-审查报告.md` 中的多项（F-01 模型参数被忽略、F-03/H-06 `rpc_*`/`active`/`tool_excute` 死链、H-07、M-10、R2/D2）**已通过重构或删除关闭**——引用旧报告前必须核销。
 
-> **与 `docs/审查日志/` 的分工**：上面这张表只说明"这些编号不是新发现"。**哪一条还成立、逐条判定与当前行号，以 `docs/审查日志/汇总报告.md`（52 条待修）与 `docs/审查日志/核验报告.md`（221 条判定）为准**——它们是对全部历史日志做过一次完整核销后的现行清单。
+> **与 `docs/审查日志/` 的分工**：上面这张表只说明"这些编号不是新发现"。**哪一条还成立、逐条判定与当前行号，以 `docs/review/4_0_5a.md`（51 条待办）与 `docs/审查日志/核验报告.md`（221 条判定）为准**——它们是对全部历史日志做过一次完整核销后的现行清单。
 
 ---
 
@@ -4922,6 +4922,7 @@ provider_id = next(item["provider_id"] for item in tools if item["name"] == tool
 | **回调队列（用户指出）** | 第 0 章与第 06 章称「异步回调不能写 `main_agent_queue`，必须配专用队列 + 专用消费者」 | 判定错误：`agent/task_worker.py:46` 的条件是 `event_type != "workflow"`，对**任意**类型开放绑定路由；`tool_server/main.py:57,141` 按节点 `callback.queue` 投递，该字段可以就是主队列 | **已修复**：第 0 章（数据流图、队列表、Event 类型表）、第 06 章扩展槽 4、目标态表、E-05、D-13 全部改正，并在 §8.15 补出正确用法 |
 | 第 6 章 D-22（针对本文档第 0 章） | 第 0 章称"QQ consumer 用 `RPUSH` 投递 `workflow` Event" | 该描述**确曾在第 0 章初稿中存在**，但已在本轮成稿前独立改正为 `LPUSH` + 原 `qq` 信封。复核 `qqbot_consumer/queue_consumer.py:28`：`publish_to_queue(MAIN_AGENT_QUEUE_NAME, event)` 投递的是**原 `qq` 信封**；`qqbot_consumer/queue_client.py:19`：`client.lpush(...)` | **已修复，注销**（第 0 章现为正确表述） |
 | 第 6 章 D-22（针对 `README.md:96`） | README 称"内置 handler 会把 `qq` / `terminal` 转换成 `workflow` Event" | 该表述**仍然不精确**：`agent/task_worker.py:46-52` 是**与类型无关的通用绑定路由**（条件为 `event_type != "workflow"`），并非 `qq`/`terminal` 专属 handler | **保留为文档漂移**，见 §8.7 |
+| 第 7 章 D-01（针对 `docs/24:14`、`docs/20:78`） | 两处文档称 `response` / `error` 不参与绑定路由，与源码及测试相反 | 文档面**已改正**：`docs/24:19`、`docs/20:86` 现均写明"当前只有 `workflow` 不参与绑定路由"，与 `agent/task_worker.py:46`、`agent/test_task_worker.py:66-74` 一致 | **文档面已修复，注销**；§8.7 的**行为面结论继续成立**（为 `response` 建绑定仍会自环），且 `docs/20:35`、`docs/24:19` 已明示该风险 |
 | 第 4 章自查（链接文字） | `04-workflow-editor.md` D6 行的 `structure.js` 链接文字指向 `inspector.js` | 已核对并修正为 `inspector/structure.js` | **已修复** |
 
 > 说明：这类注销不是吹毛求疵。审计稿最常见的失效方式，就是把"提出时成立、定稿前已被改掉"的问题继续当成现状交付。**引用本文档任何一条缺陷前，请先在本节查一次是否已注销。**
@@ -4986,7 +4987,7 @@ provider_id = next(item["provider_id"] for item in tools if item["name"] == tool
 
 项目自己的 `docs/审查日志/归档/2026-10-11-全项目-审查报告.md`（**已归档**；其中的 `file:line` 属该件自身行号，归档声明"行号作废"针对的是重构前的旧行号）是在容器内跑过测试的快照：**agent 90 例中 1 失败 + 2 错误、tool_server 7 例全通过、manager_webui 17 例全通过**，那 3 例红钉住的是 ~~A1~~（**已修复**）与 A2。**它与本文档 §8 的结论互相印证**——尤其是 A1–A4 四项，两条独立路径得出同一结论。这提高了置信度，但**不等于本文档验证过运行时行为**（且 A1 修复后，本文档未复跑测试来确认红测转绿）。
 
-> 另外：`docs/审查日志/汇总报告.md` 与 `docs/审查日志/核验报告.md` 是对该目录全部历史日志（221 条）做过一次完整核销后的现行清单，**结论口径与本文档一致**（核对过程见 `docs/功能全景与审查日志-交叉验证报告.md`）。
+> 另外：`docs/review/4_0_5a.md` 与 `docs/审查日志/核验报告.md` 是对该目录全部历史日志（221 条）做过一次完整核销后的现行清单，**结论口径与本文档一致**（核对过程见 `docs/功能全景与审查日志-交叉验证报告.md`）。
 
 > 审计方式、确定性的三个层次与全部局限，详见本文档开头的「文档说明与局限」一节。
 

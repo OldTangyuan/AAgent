@@ -92,7 +92,7 @@
 | 核心命题 | 定义当前 Workflow + Tool Server 架构下 Event 的类型、JSON 格式、队列方向与完整运行路径（`docs/20:3-9`）。 |
 | 关键设计决定 | 主队列 `LPUSH` + `BRPOP`（FIFO），终端 `RPUSH` 插队（`docs/20:50-52`）；QQ 队列 `LPUSH` + `BLPOP`（LIFO，`docs/20:38-39`）；`workflow` / `response` / `error` 为内部事件（`docs/20:25`）；未绑定事件只落历史（`docs/20:27`）；payload 中不存在的字段以 `None` 传播并被运行时判为"没有值"（`docs/20:176`）。 |
 | 实现程度 | **已落地**：`workflow` / `response` / `error` 三条链（`agent/task_worker.py:43-93`）、终端 4000 字符与 `files` 为空约束、入口按端口名取 payload 字段（`agent/task_worker.py:83-87`）。 |
-| 与源码差异 | `docs/20:78` 写"`response` / `error` 不参与绑定路由"，但 `agent/task_worker.py:46-53` 对除 `workflow` 外的**所有** `event_type` 都做绑定查询，`agent/test_task_worker.py:66-74` 明确断言 `response` / `error` 有绑定时会触发 Workflow。 |
+| 与源码差异 | **已消除**：`docs/20:78` 原文"`response` / `error` 不参与绑定路由"已改为 `docs/20:86` 的"当前只有 `workflow` 不参与绑定路由"，与 `agent/task_worker.py:46-53`（对除 `workflow` 外**所有** `event_type` 都做绑定查询）及 `agent/test_task_worker.py:66-74` 一致。 |
 | 开放扩展点 | 新增事件类型的六项检查表（`docs/20:305-312`）；`async_result` 回调接入（**推荐路线 A：主队列 + 一条绑定**，见成稿 §8.15；`docs/20:247` 的"必须专用消费者"要求已过时）；事件格式统一入口（见 `架构问题汇总` A-08）。 |
 
 ### 7.3.5 21-Workflow Context 节点设计
@@ -132,7 +132,7 @@
 | 核心命题 | 记录已实现的绑定路由行为：每个事件类型至多绑定一个 Workflow，`workflow_id` 由路由写入且不可被原 payload 覆盖（`docs/24:3,7-14,40`）。 |
 | 关键设计决定 | 删除 `_id = "agent"` 全局 `workflow_id` 回退，路由只由绑定决定（`docs/24:12`）；绑定查询失败 ≠ 未绑定（`docs/24:11`）；目标不存在时恰好发布一个 `error`、不发布 `response`（`docs/24:44-58`）；`workflow_id` 可作为输入端口被读取，也可不声明（`docs/24:42`）。 |
 | 实现程度 | **已落地**，与源码逐条一致：`agent/task_worker.py:21-41`（按 event_type 查启用绑定）、`agent/task_worker.py:49-52`（覆盖 `workflow_id`）、`agent/task_worker.py:58-65`（目标不存在发 `error`）、`agent/test_task_worker.py:13-130`。 |
-| 与源码差异 | 唯一显著偏差：`docs/24:14` 写"`workflow`、`response`、`error` 是内部事件，不走上述绑定路由"，与源码（只排除 `workflow`）和既有测试相反。 |
+| 与源码差异 | **已消除**：`docs/24:14` 原文"`workflow`、`response`、`error` 是内部事件，不走上述绑定路由"已改为 `docs/24:19` 的"当前只有 `workflow` 不走绑定路由；`response`、`error` 也会查绑定"，与源码（只排除 `workflow`）和既有测试一致。 |
 | 开放扩展点 | 该文档自我定位为"已实现行为记录"（`docs/24:3`），未声明后续扩展；绑定与 Workflow 改名 / 删除的一致性仍是开放问题（`2026-10-11-全项目-审查报告.md:60`）。 |
 
 ### 7.3.9 25-Session 管理页双模式编辑设计
@@ -163,7 +163,7 @@
 
 | 编号 | 扩展槽 | 出处 | 性质 | 现状 |
 | --- | --- | --- | --- | --- |
-| E-01 | 任意 `event_type` + 启用绑定 → `workflow` 事件 | `docs/24:7-14`；`docs/20:78` | 已开放 | 路由对除 `workflow` 外全部类型生效（`agent/task_worker.py:46-53`） |
+| E-01 | 任意 `event_type` + 启用绑定 → `workflow` 事件 | `docs/24:12-19`；`docs/20:86` | 已开放 | 路由对除 `workflow` 外全部类型生效（`agent/task_worker.py:46-53`） |
 | E-02 | 新适配器直接构造标准 `workflow` Event 写主队列 | `README.md:10,93` | 已开放 | 无需改执行器；payload 字段与 Input 端口同名即可 |
 | E-03 | 新事件源适配器（Webhook / 定时 / 业务系统） | `README.md:10,74` | 预留未用 | 图中标为 `Future`，无实现 |
 | E-04 | QQ / Terminal 适配器作为可替换实现 | `README.md:14,94-95` | 已开放 | 两个实现并存，语义不同（LIFO 排队 vs RPUSH 插队） |
@@ -311,7 +311,7 @@
 | R-47 | 配置权威来源（Redis vs 文件，`SET NX`）（A-09） | `架构问题汇总.md:35`；同项 `2026-09-14` M-08 | 缺陷 | P1 | 否 |
 | R-48 | Redis 连接参数统一（密码与 `socket_timeout`）（A-10） | `架构问题汇总.md:36`；同项 `2026-09-14` M-21/M-22 | 缺陷 | P1 | 否 |
 | R-49 | Python 版本与依赖锁定策略（A-11） | `架构问题汇总.md:37` | 重构 | P1 | 否 |
-| R-50 | ~~主 worker 缺少失败反馈（节点失败静默中断）~~ | ✅ **已修复**（2026-10-12）：F-02 已关闭，`agent/task_worker.py:114-124` 发布 `error`（详见 `docs/审查日志/汇总报告.md` §2.1 条目 2） | 缺陷 | 高 | 否 |
+| R-50 | ~~主 worker 缺少失败反馈（节点失败静默中断）~~ | ✅ **已修复**（2026-10-12）：F-02 已关闭，`agent/task_worker.py:114-124` 发布 `error`（详见 `docs/review/4_0_5a.md` §2.1 条目 2） | 缺陷 | 高 | 否 |
 | R-51 | 未知 `event_type` 的可诊断处理（缺 `payload` 时 `KeyError`） | `2026-09-14:327-350`（H-07；`handle_map` 已删除，改为绑定查询，仍未判空） | 缺陷 | 中 | 否 |
 | R-52 | 事件与队列写入路径无体积限制 | `2026-09-14:387-391`；同项 `2026-09-13` R3 | 缺陷 | 中 | 否 |
 | R-53 | `request_body_guard` 只信 `content-length` | `2026-09-14:509-513`；同项 `2026-09-13` W3 | 缺陷 | 中 | 否 |
@@ -342,7 +342,7 @@
 | R-78 | 思考分支与语义合并 | `docs/废弃旧文档/05-路线图与创新.md:232` | 功能 | — | 是 |
 | R-79 | Pre-Tool 工具分组与 Content Package 内容包 | `docs/废弃旧文档/05-路线图与创新.md:24-25,397` | 功能 | — | 是 |
 | R-80 | Chat 页面回显 Agent 最终 `response` 与工具调用过程 | `docs/废弃旧文档/05-路线图与创新.md:104-106` | 功能 | — | 否（标注"部分实现，尚未完成"） |
-| R-81 | 全局/激活 Workflow 回退（已被绑定路由取代） | `docs/24:12`；`docs/20:78` | 重构 | 已关闭 | 否 |
+| R-81 | 全局/激活 Workflow 回退（已被绑定路由取代） | `docs/24:17`；`docs/20:86` | 重构 | 已关闭 | 否 |
 | R-82 | `_id="agent"` 全局设置读取逻辑删除 | `docs/24:12` | 重构 | 已关闭 | 否 |
 
 > 计数：上表 **82** 项，其中已关闭 2 项（R-81/R-82 保留在表内以标记"曾经的路线图项已被绑定路由取代"），**纯设想 12** 项。
@@ -412,7 +412,7 @@
 
 | 编号 | 文档主张 | 源码事实 | 影响 |
 | --- | --- | --- | --- |
-| D-01 | `docs/24:14`：`workflow`、`response`、`error` 是内部事件，不走绑定路由，避免内部事件再次触发自身；`docs/20:78`：`response` / `error` 不参与绑定路由 | `agent/task_worker.py:46` 只排除 `workflow`，`response` / `error` 同样查绑定；`agent/test_task_worker.py:66-74` 断言二者有绑定时会触发 Workflow | **严重**。按文档理解事件安全边界会得出相反结论；若为 `response` 建绑定会形成自触发链 |
+| ~~D-01~~ | ~~`docs/24:14`：`workflow`、`response`、`error` 是内部事件，不走绑定路由，避免内部事件再次触发自身；`docs/20:78`：`response` / `error` 不参与绑定路由~~ **【已修复】** `docs/20:86` 与 `docs/24:19` 现均写明只有 `workflow` 不参与绑定路由 | `agent/task_worker.py:46` 只排除 `workflow`，`response` / `error` 同样查绑定；`agent/test_task_worker.py:66-74` 断言二者有绑定时会触发 Workflow | 文档面已消除（见 §9.12 注销）。**行为面不变**：为 `response` 建绑定仍会形成自触发链，现由 `docs/20:35`、`docs/24:19` 明示 |
 | D-02 | `docs/19:275`：`remote_async_tool` 保存时"不允许出现 `mode` 或 `callback` arguments" | `agent/workflow_contract.py:67` 允许 `callback`；`agent/workflow_validator.py:375-392` 完整校验 callback 结构；`docs/19:163-165` 与 `docs/20:214-222` 亦描述 callback 能力 | **严重**。文档自相矛盾，实施者若按 §5.2 删掉校验会破坏已落地的回调配置 |
 | D-03 | `docs/23:34`：`workflow_context_repository.py` 的 `_valid_value` 未处理 `event` / `list-event`，须先解决该差异才能复用为六类型校验器 | `agent/workflow_context_repository.py:49-52` 已处理 `event` 与 `list-event` | **高**。会诱导实现者重复修补已完成的类型校验 |
 | D-04 | `docs/22:52-61`：`deserialize_json` 的 `type` 支持六种类型（不含 `map-content`） | `agent/workflow_nodes.py:257-258` 支持 `map-content`；`docs/26:71` 亦要求支持 | **高**。按 22 号文档实现会漏掉 `map-content` 分支 |

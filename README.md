@@ -165,7 +165,7 @@ tool_provider/      实际执行工具的 Provider(QQ / Bilibili / 文档)
 webui_py/           Agent WebUI(8081)
 manager_webui/      管理 WebUI(8084)
 workflow_editor/    Workflow 编辑器(8082)
-docs/               设计文档、审查日志与 README 图片
+docs/               设计文档、审查记录与 README 图片
 data/               Redis / MongoDB 持久化数据(不提交)
 ```
 
@@ -175,11 +175,9 @@ data/               Redis / MongoDB 持久化数据(不提交)
 
 | 文档 | 内容 |
 | --- | --- |
-| [17-Tool Server 设计](docs/17-Tool%20Server设计.md) | 工具注册、调用与回调协议 |
-| [18-Tool Server 内核实现](docs/18-Tool%20Server内核实现.md) | Provider 并发、Redis 等待、状态原子性与回调投递 |
-| [19-Workflow 本地与远程 Tool 节点拆分](docs/19-Workflow本地与远程Tool节点拆分.md) | local / remote_sync / remote_async 三类工具节点 |
-| [20-Event 协议与流转](docs/20-Event协议与流转.md) | Event 类型、队列方向与完整运行路径 |
-| [21-Workflow Context 节点设计](docs/21-Workflow%20Context节点设计.md) | 可变 Context、Redis 生命周期与 foreach 累积 |
+| [AAgent-功能全景](docs/功能全景/AAgent-功能全景.md) | 逐文件通读源码的功能 / API / 按钮全景（现行） |
+| [问题清单 4.0.5a](docs/review/4_0_5a.md) | 当前未修问题 |
+| [Event 1.0](docs/protocol/event_1_0.md) | Event 数据契约 |
 
 ## TODO
 

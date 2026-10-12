@@ -577,7 +577,7 @@ WebUI 对 pending 列表的删除/编辑按 `LINDEX -position` + `LSET` + `LREM`
 | --- | --- | --- | --- |
 | D-01 | **高** | `qqbot_consumer` 声称可重试，实际 at-most-once，异常时静默丢事件 | `queue_consumer.py:49` vs `:40`、`queue_client.py:23-26` |
 | D-02 | **高** | 未授权用户私聊消息被投递并**无条件存档**（授权判定在存档之后） | `queue_consumer.py:21` 先于 `:27`；`qqbot/listener.py:31-42` 无用户过滤 |
-| D-03 | **高** | `response` / `error` 实际参与绑定路由，与文档「不参与」冲突，可构成事件回环 | `agent/task_worker.py:46-52`、`test_task_worker.py:63-73` vs `docs/20:78`、`docs/24:14` |
+| ~~D-03~~ | ~~**高**~~ **文档面已关闭** | `response` / `error` 实际参与绑定路由，**可构成事件回环**（仍成立）；原判「与文档冲突」部分**已改正**：`docs/20:86`、`docs/24:19` 现写明"当前只有 `workflow` 不参与绑定路由" | `agent/task_worker.py:46-52`、`test_task_worker.py:63-73`；`docs/20:86`、`docs/24:19` |
 | D-04 | **中** | `QQ_TARGET_USER_ID` 在 listener 中被读入即弃（死变量），但被 `os.environ[]` 强读 → 缺变量时监听器崩溃，配置了也无过滤作用 | `qqbot/listener.py:14`（全文件唯一引用） |
 | D-05 | **中** | 无幂等：`message_id` 等字段被丢弃且无唯一索引，重放会二次存档 + 二次执行 | `qqbot/listener.py:33-42`、`qqbot_consumer/history_repository.py:25-26` |
 | D-06 | **中** | `inputing` 噪音永久落库，集合无 TTL 索引 | `qqbot/listener.py:23-30`、`queue_consumer.py:21,30-31`、`history_repository.py:25-26` |

@@ -148,7 +148,7 @@ cd D:\AAgent
 git checkout main
 git status --short
 git log --oneline -5
-git tag -a v4.0.1 -m "v4.0.1 — 一句话概括" -m "正文粘贴 CHANGELOG.md 中 [4.0.1] 的条目"
+git tag -a v4.0.1 -m "v4.0.1 — 一句话概括" -m "正文写本版发布记录：与上一版的不同 + 携带的 event / workflow 协议版本"
 git show v4.0.1
 git push origin v4.0.1
 ```
