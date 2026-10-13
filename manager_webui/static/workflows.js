@@ -550,7 +550,7 @@ async function confirmWorkflowUpload(event) {
     const uploaded = workflowSummary(await uploadWorkflow(created.id, {
       name: uploadName,
       description: typeof imported.description === 'string' ? imported.description : '',
-      version: Number.isInteger(imported.version) && imported.version >= 1 ? imported.version : 1,
+      schema_version: imported.schema_version,
       input_ports: imported.input_ports || [],
       output_ports: imported.output_ports || [],
       nodes,
@@ -596,7 +596,7 @@ async function overwriteWorkflow() {
     const uploaded = workflowSummary(await uploadWorkflow(existing.id, {
       name: uploadName,
       description: typeof imported.description === 'string' ? imported.description : '',
-      version: Number.isInteger(imported.version) && imported.version >= 1 ? imported.version : 1,
+      schema_version: imported.schema_version,
       input_ports: imported.input_ports || [],
       output_ports: imported.output_ports || [],
       nodes,
@@ -649,7 +649,7 @@ function exportableWorkflow(detail) {
   return {
     name: detail.name,
     description: detail.description || '',
-    version: detail.version,
+    schema_version: detail.schema_version,
     input_ports: detail.input_ports || [],
     output_ports: detail.output_ports || [],
     workflow_nodes: detail.workflow_nodes || [],
