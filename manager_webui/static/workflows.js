@@ -474,18 +474,26 @@ function resolveWorkflowReferences(imported) {
   return { workflowNodes, nodes };
 }
 
+function workflowUploadPayload(imported, name, nodes) {
+  const { workflow_nodes, remote_tools, ...workflow } = imported;
+  return {
+    ...workflow,
+    name,
+    description: typeof imported.description === 'string' ? imported.description : '',
+    nodes,
+  };
+}
+
 function parseWorkflowText(text) {
   const imported = JSON.parse(text);
   if (!imported || typeof imported !== 'object' || Array.isArray(imported)) throw new Error('内容不是有效的 Workflows JSON');
-  if (typeof imported.name !== 'string' || !imported.name.trim()) throw new Error('Workflows 名称不能为空');
-  if (!Array.isArray(imported.nodes) || !Array.isArray(imported.connections)) throw new Error('Workflows 缺少节点或连接数据');
   return imported;
 }
 
 function prepareWorkflowUpload(imported) {
   state.pendingUpload = imported;
   state.uploadMode = 'create';
-  elements.uploadName.value = imported.name.trim();
+  elements.uploadName.value = typeof imported.name === 'string' ? imported.name.trim() : '';
   validateUploadName();
   elements.uploadDialog.showModal();
   elements.uploadName.focus();
@@ -547,15 +555,7 @@ async function confirmWorkflowUpload(event) {
     const { workflowNodes, nodes } = resolveWorkflowReferences(imported);
     created = await createWorkflow(uploadName);
     await updateWorkflowMetadata(created.id, imported.input_ports || [], imported.output_ports || [], workflowNodes, imported.remote_tools || []);
-    const uploaded = workflowSummary(await uploadWorkflow(created.id, {
-      name: uploadName,
-      description: typeof imported.description === 'string' ? imported.description : '',
-      schema_version: imported.schema_version,
-      input_ports: imported.input_ports || [],
-      output_ports: imported.output_ports || [],
-      nodes,
-      connections: imported.connections,
-    }));
+    const uploaded = workflowSummary(await uploadWorkflow(created.id, workflowUploadPayload(imported, uploadName, nodes)));
     state.workflows.unshift(uploaded);
     state.selectedId = uploaded.id;
     state.pendingUpload = null;
@@ -593,15 +593,7 @@ async function overwriteWorkflow() {
   try {
     const { workflowNodes, nodes } = resolveWorkflowReferences(imported);
     await updateWorkflowMetadata(existing.id, imported.input_ports || [], imported.output_ports || [], workflowNodes, imported.remote_tools || []);
-    const uploaded = workflowSummary(await uploadWorkflow(existing.id, {
-      name: uploadName,
-      description: typeof imported.description === 'string' ? imported.description : '',
-      schema_version: imported.schema_version,
-      input_ports: imported.input_ports || [],
-      output_ports: imported.output_ports || [],
-      nodes,
-      connections: imported.connections,
-    }));
+    const uploaded = workflowSummary(await uploadWorkflow(existing.id, workflowUploadPayload(imported, uploadName, nodes)));
     const index = state.workflows.findIndex((workflow) => workflow.id === existing.id);
     state.workflows[index] = uploaded;
     state.workflowDetails.delete(existing.id);
