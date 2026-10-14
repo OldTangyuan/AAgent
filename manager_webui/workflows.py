@@ -13,6 +13,7 @@ from pymongo import DESCENDING
 from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
+from workflow_contract import filter_connections
 from workflow_validator import WorkflowValidationError, validate_workflow
 
 MAX_WORKFLOW_NODES = 200
@@ -275,12 +276,8 @@ def synchronize_metadata_ports(
     input_ports: list[dict[str, Any]],
     output_ports: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    input_node_ids = {node.get("id") for node in nodes if node.get("type") == "input"}
-    output_node_ids = {node.get("id") for node in nodes if node.get("type") == "output"}
     input_node_ports = [{**port, "id": f"workflow:{port['name']}"} for port in input_ports]
     output_node_ports = [{**port, "id": f"workflow:{port['name']}"} for port in output_ports]
-    input_types = {port["id"]: port["type"] for port in input_node_ports}
-    output_types = {port["id"]: port["type"] for port in output_node_ports}
     synchronized_nodes = [
         {
             **node,
@@ -294,18 +291,7 @@ def synchronize_metadata_ports(
         }
         for node in nodes
     ]
-    synchronized_connections = []
-    for connection in connections:
-        connection_type = connection.get("type")
-        if connection_type == "control":
-            synchronized_connections.append(connection)
-            continue
-        if connection.get("fromId") in input_node_ids and input_types.get(connection.get("fromPortId")) != connection_type:
-            continue
-        if connection.get("toId") in output_node_ids and output_types.get(connection.get("toPortId")) != connection_type:
-            continue
-        synchronized_connections.append(connection)
-    return filter_invalid_connections(synchronized_nodes, synchronized_connections, input_ports, output_ports)
+    return filter_invalid_connections(synchronized_nodes, connections, input_ports, output_ports)
 
 
 def filter_invalid_connections(
@@ -315,143 +301,7 @@ def filter_invalid_connections(
     output_ports: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Drop links whose endpoints no longer exist after metadata changes."""
-    nodes_by_id = {node.get("id"): node for node in nodes}
-    input_types = {f"workflow:{port.get('name')}": port.get("type") for port in input_ports}
-    output_types = {f"workflow:{port.get('name')}": port.get("type") for port in output_ports}
-
-    def valid(connection: dict[str, Any]) -> bool:
-        source = nodes_by_id.get(connection.get("fromId"))
-        target = nodes_by_id.get(connection.get("toId"))
-        if not source or not target:
-            return False
-        from_port = connection.get("fromPortId")
-        to_port = connection.get("toPortId")
-        connection_type = connection.get("type")
-        if connection_type == "control":
-            source_outputs = {"control-out"}
-            target_inputs = {"control-in"}
-            if source.get("type") == "input":
-                source_outputs = {"control-out"}
-            elif source.get("type") == "router":
-                source_outputs = {branch.get("id") for branch in node_arguments(source).get("branches", [])}
-            elif source.get("type") == "foreach":
-                source_outputs = {"control-out", "loop-out"}
-            if target.get("type") == "input":
-                return False
-            if target.get("type") == "foreach":
-                target_inputs = {"control-in", "loop-in"}
-            return from_port in source_outputs and to_port in target_inputs
-        if connection_type not in DATA_TYPES:
-            return False
-
-        def source_type() -> str | None:
-            node_type = source.get("type")
-            if node_type == "input":
-                return input_types.get(from_port)
-            if node_type == "output":
-                return None
-            if node_type == "construct_message" and from_port == "message-out":
-                return "message"
-            if node_type == "construct_content" and from_port == "content-out":
-                return "content"
-            if node_type == "construct_map_content" and from_port == "map-out":
-                return "map-content"
-            if node_type == "map_content_get" and from_port == "content-out":
-                return "content"
-            if node_type == "split_event" and from_port in {"type-out", "payload-out"}:
-                return "content"
-            if node_type == "deserialize_json":
-                return next(
-                    (output.get("type") for output in node_arguments(source).get("outputs", []) if output.get("key") == from_port),
-                    None,
-                )
-            if node_type in {"llm", "local_tool"} and from_port == "output":
-                return "content"
-            if node_type == "remote_sync_tool":
-                return next(
-                    (output.get("type") for output in node_arguments(source).get("outputs", []) if output.get("name") == from_port),
-                    None,
-                )
-            if node_type == "remote_async_tool" and from_port == "task_id":
-                return "content"
-            if node_type == "history" and from_port == "events":
-                return "list-event"
-            if node_type == "llm" and from_port == "reasoning" and node_arguments(source).get("think") is True:
-                return "content"
-            if node_type == "llm" and from_port == "tool_calls" and node_arguments(source).get("tool_calls") is True:
-                return "list-content"
-            if node_type == "construct_list" and from_port == "list-out":
-                return list_type_for_item(node_arguments(source).get("item_type"))
-            if node_type == "list_append" and from_port == "list-out":
-                return list_type_for_item(node_arguments(source).get("item_type"))
-            if node_type == "foreach" and from_port == "item-out":
-                return node_arguments(source).get("item_type")
-            if node_type in {"context_create", "session_create"} and from_port == ("context-id" if node_type == "context_create" else "session-id"):
-                return "content"
-            if node_type in {"context_read", "context_write", "session_read", "session_write"}:
-                if from_port == ("context-id" if node_type.startswith("context_") else "session-id"):
-                    return "content"
-                if from_port == "value-out":
-                    return node_arguments(source).get("value_type")
-            if node_type == "workflow":
-                return next((port.get("type") for port in source.get("output_ports", []) if f"workflow:{port.get('name')}" == from_port), None)
-            return None
-
-        def target_type() -> str | None:
-            node_type = target.get("type")
-            if node_type == "output":
-                return output_types.get(to_port)
-            if node_type == "llm" and to_port == "messages-in":
-                return "list-message"
-            if node_type == "construct_message" and (
-                to_port == "content-in"
-                or (
-                    to_port == "role-in"
-                    and node_arguments(target).get("role_source", "fixed") == "port"
-                )
-            ):
-                return "content"
-            if node_type == "map_content_get" and to_port in {"map-in", "key-in"}:
-                return "map-content" if to_port == "map-in" else "content"
-            if node_type == "split_event" and to_port == "event-in":
-                return "event"
-            if node_type == "deserialize_json" and to_port == "content-in":
-                return "content"
-            if node_type in {"construct_content", "router"} and to_port in target.get("dataInputPorts", ["content-in"]):
-                return "content"
-            if node_type == "local_tool" and to_port in node_arguments(target).get("parameters", []):
-                return "content"
-            if node_type in {"remote_sync_tool", "remote_async_tool"}:
-                return next(
-                    (parameter.get("type") for parameter in node_arguments(target).get("parameters", []) if parameter.get("name") == to_port),
-                    None,
-                )
-            if node_type == "construct_list" and to_port in target.get("dataInputPorts", []):
-                return node_arguments(target).get("item_type")
-            if node_type == "list_append":
-                item_type = node_arguments(target).get("item_type")
-                if to_port == "list-in":
-                    return list_type_for_item(item_type)
-                if to_port == "item-in":
-                    return item_type
-            if node_type == "foreach" and to_port == "list-in":
-                return list_type_for_item(node_arguments(target).get("item_type"))
-            if node_type in {"context_create", "session_create"} and to_port == "initial-value":
-                return node_arguments(target).get("value_type")
-            if node_type in {"context_read", "session_read"} and to_port == ("context-id" if node_type == "context_read" else "session-id"):
-                return "content"
-            if node_type in {"context_write", "session_write"}:
-                if to_port == ("context-id" if node_type == "context_write" else "session-id"):
-                    return "content"
-                if to_port == "value-in":
-                    return node_arguments(target).get("value_type")
-            if node_type == "workflow":
-                return next((port.get("type") for port in target.get("input_ports", []) if f"workflow:{port.get('name')}" == to_port), None)
-            return None
-
-        return source_type() == connection_type == target_type()
-
-    return nodes, [connection for connection in connections if valid(connection)]
+    return nodes, filter_connections(connections, nodes, input_ports, output_ports)
 
 
 def synchronize_workflow_nodes(
