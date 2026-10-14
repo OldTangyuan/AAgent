@@ -216,13 +216,8 @@ function editDependency(item, references, currentName) {
   saveButton.textContent = '保存';
   const updateSaveState = () => {
     const name = input.value.trim();
-    const exists = state.workflows.some((workflow) => workflow.name !== state.selectedId && workflow.name === name);
-    const duplicate = references.some((reference) => {
-      const referenceValue = reference.name || reference.workflow_name;
-      return referenceValue !== currentName && referenceValue === name;
-    });
-    saveButton.disabled = !name || !exists || duplicate;
-    input.classList.toggle('invalid', Boolean(name) && (!exists || duplicate));
+    saveButton.disabled = !name;
+    input.classList.toggle('invalid', !name);
   };
   const cancelButton = document.createElement('button');
   cancelButton.type = 'button';
@@ -248,19 +243,10 @@ function editDependency(item, references, currentName) {
 async function saveDependency(references, previousName, nextName) {
   const workflow = selectedWorkflow();
   if (!workflow || state.saving || !nextName || nextName === previousName) return;
-  const target = state.workflows.find((item) => item.name === nextName);
-  if (!target) {
-    elements.state.textContent = '依赖 Workflows 不存在，无法保存';
-    return;
-  }
   const nextReferences = references.map((reference) => ({
     name: (reference.name || reference.workflow_name) === previousName ? nextName : reference.name || reference.workflow_name,
     ...((reference.name || reference.workflow_name) === previousName ? { previous_name: previousName } : {}),
   }));
-  if (new Set(nextReferences.map((reference) => reference.name)).size !== nextReferences.length) {
-    elements.state.textContent = '依赖 Workflows 不能重复';
-    return;
-  }
   state.saving = true;
   elements.state.textContent = '保存依赖中';
   updateControls();
