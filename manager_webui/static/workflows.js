@@ -215,7 +215,7 @@ function editDependency(item, references, currentName) {
   saveButton.className = 'dependency-save-button';
   saveButton.textContent = '保存';
   const updateSaveState = () => {
-    const name = input.value.trim();
+    const name = input.value;
     saveButton.disabled = !name;
     input.classList.toggle('invalid', !name);
   };
@@ -229,11 +229,11 @@ function editDependency(item, references, currentName) {
   cancelButton.addEventListener('click', () => renderConfiguration());
   input.addEventListener('input', updateSaveState);
   saveButton.addEventListener('click', () => {
-    if (input.value.trim() === currentName) {
+    if (input.value === currentName) {
       renderConfiguration();
       return;
     }
-    saveDependency(references, currentName, input.value.trim());
+    saveDependency(references, currentName, input.value);
   });
   updateSaveState();
   input.focus();
