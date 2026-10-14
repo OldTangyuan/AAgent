@@ -708,6 +708,7 @@ def create_workflows_router(
 
     @router.patch("/api/workflow/{name}/metadata")
     def update_workflow_metadata(name: str, payload: WorkflowMetadataPatchRequest):
+        # 改名和删除只作用于目标 Workflow，不级联改写其他引用处；全量同步代价大且没有功能收益。
         next_name = payload.name.strip()
         try:
             existing = workflows.find_one({"name": name})
@@ -750,6 +751,7 @@ def create_workflows_router(
 
     @router.delete("/api/workflow/{name}")
     def delete_workflow(name: str):
+        # 删除只移除目标 Workflow，不扫描或修改其他 Workflow 中的引用。
         try:
             result = workflows.delete_one({"name": name})
         except PyMongoError:
