@@ -358,9 +358,9 @@ def remap_workflow_node_names(
     references: list[WorkflowNodeReference],
 ) -> list[dict[str, Any]]:
     replacements = {
-        reference.previous_name: reference.name.strip()
+        reference.previous_name: reference.name
         for reference in references
-        if reference.previous_name and reference.previous_name != reference.name.strip()
+        if reference.previous_name and reference.previous_name != reference.name
     }
     remapped = []
     for node in nodes:
@@ -488,7 +488,7 @@ def create_workflows_router(
             input_ports = [port.model_dump() | {"name": port.name.strip()} for port in payload.input_ports]
             output_ports = [port.model_dump() | {"name": port.name.strip()} for port in payload.output_ports]
             references = payload.workflow_nodes
-            reference_names = [item.get("name", "").strip() for item in references]
+            reference_names = [item.get("name", "") for item in references]
             if any(not reference_name for reference_name in reference_names) or len(reference_names) != len(set(reference_names)):
                 return JSONResponse(status_code=400, content={"error": "Workflow 依赖名称不能为空或重复"})
             if name in reference_names:
@@ -499,7 +499,7 @@ def create_workflows_router(
                 return JSONResponse(status_code=400, content={"error": "引入的 Workflow 不存在或已被删除"})
             canonical_references = []
             for reference in references:
-                actual = by_name[reference["name"].strip()]
+                actual = by_name[reference["name"]]
                 input_contract = [port.model_dump() for port in reference.get("input_ports", [])]
                 output_contract = [port.model_dump() for port in reference.get("output_ports", [])]
                 if input_contract != actual.get("input_ports", []) or output_contract != actual.get("output_ports", []):
@@ -568,7 +568,7 @@ def create_workflows_router(
             updates = {"name": next_name, "updated_at": datetime.now(timezone.utc)}
             if payload.workflow_nodes is not None:
                 references = [reference.model_dump(exclude_none=True) for reference in payload.workflow_nodes]
-                names = [reference["name"].strip() for reference in references]
+                names = [reference["name"] for reference in references]
                 targets = list(workflows.find({"name": {"$in": names}})) if names else []
                 by_name = {target["name"]: target for target in targets}
                 if len(names) != len(set(names)) or any(target not in by_name for target in names):

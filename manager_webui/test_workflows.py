@@ -56,6 +56,16 @@ class WorkflowSchemaVersionTest(unittest.TestCase):
 
 
 class WorkflowConnectionFilterTest(unittest.TestCase):
+    def test_dependency_rename_preserves_whitespace_in_name(self):
+        nodes = [
+            {"id": "call-child", "type": "workflow", "arguments": {"workflow_name": "Old child"}},
+        ]
+        references = [WorkflowNodeReference(name="  New child  ", previous_name="Old child")]
+
+        remapped = remap_workflow_node_names(nodes, references)
+
+        self.assertEqual(remapped[0]["arguments"]["workflow_name"], "  New child  ")
+
     def test_dependency_rename_remaps_only_matching_canvas_nodes_and_refreshes_ports(self):
         nodes = [
             {
