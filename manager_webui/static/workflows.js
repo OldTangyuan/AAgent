@@ -255,6 +255,7 @@ async function saveDependency(references, previousName, nextName) {
   }
   const nextReferences = references.map((reference) => ({
     name: (reference.name || reference.workflow_name) === previousName ? nextName : reference.name || reference.workflow_name,
+    ...((reference.name || reference.workflow_name) === previousName ? { previous_name: previousName } : {}),
   }));
   if (new Set(nextReferences.map((reference) => reference.name)).size !== nextReferences.length) {
     elements.state.textContent = '依赖 Workflows 不能重复';

@@ -240,13 +240,6 @@ class WorkflowRenameRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
 
 
-class WorkflowMetadataPatchRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = Field(min_length=1, max_length=120)
-    workflow_nodes: list[dict[str, Any]] | None = None
-
-
 class WorkflowNodeReference(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -254,6 +247,13 @@ class WorkflowNodeReference(BaseModel):
     input_ports: list[WorkflowPortMetadata] | None = None
     output_ports: list[WorkflowPortMetadata] | None = None
     previous_name: str | None = Field(default=None, max_length=120)
+
+
+class WorkflowMetadataPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=120)
+    workflow_nodes: list[WorkflowNodeReference] | None = None
 
 
 class RemoteToolReference(BaseModel):
@@ -503,6 +503,32 @@ def synchronize_workflow_nodes(
     return synchronized_nodes, synchronized_connections
 
 
+def remap_workflow_node_names(
+    nodes: list[dict[str, Any]],
+    references: list[WorkflowNodeReference],
+) -> list[dict[str, Any]]:
+    replacements = {
+        reference.previous_name: reference.name.strip()
+        for reference in references
+        if reference.previous_name and reference.previous_name != reference.name.strip()
+    }
+    remapped = []
+    for node in nodes:
+        if node.get("type") != "workflow":
+            remapped.append(node)
+            continue
+        arguments = node_arguments(node)
+        previous_name = arguments.get("workflow_name")
+        next_name = replacements.get(previous_name)
+        remapped.append(
+            {
+                **node,
+                "arguments": {**arguments, **({"workflow_name": next_name} if next_name else {})},
+            }
+        )
+    return remapped
+
+
 def synchronize_workflow_node_snapshots(
     nodes: list[dict[str, Any]],
     references: list[dict[str, Any]],
@@ -691,12 +717,31 @@ def create_workflows_router(
                 return JSONResponse(status_code=409, content={"error": "Workflow 名称已存在"})
             updates = {"name": next_name, "updated_at": datetime.now(timezone.utc)}
             if payload.workflow_nodes is not None:
-                names = [reference.get("name", "").strip() for reference in payload.workflow_nodes]
+                references = [reference.model_dump(exclude_none=True) for reference in payload.workflow_nodes]
+                names = [reference["name"].strip() for reference in references]
                 targets = list(workflows.find({"name": {"$in": names}})) if names else []
                 by_name = {target["name"]: target for target in targets}
                 if len(names) != len(set(names)) or any(target not in by_name for target in names):
                     return JSONResponse(status_code=400, content={"error": "Workflow 依赖名称重复或不存在"})
-                updates["workflow_nodes"] = [{"name": value, "input_ports": by_name[value].get("input_ports", []), "output_ports": by_name[value].get("output_ports", [])} for value in names]
+                remapped_nodes = remap_workflow_node_names(existing.get("nodes", []), references)
+                canonical_references = [
+                    {
+                        "name": value,
+                        "input_ports": by_name[value].get("input_ports", []),
+                        "output_ports": by_name[value].get("output_ports", []),
+                    }
+                    for value in names
+                ]
+                nodes, connections = synchronize_workflow_nodes(
+                    remapped_nodes,
+                    existing.get("connections", []),
+                    canonical_references,
+                )
+                updates.update({
+                    "workflow_nodes": canonical_references,
+                    "nodes": nodes,
+                    "connections": connections,
+                })
             workflows.update_one({"_id": existing["_id"]}, {"$set": updates})
             document = workflows.find_one({"_id": existing["_id"]})
         except PyMongoError:

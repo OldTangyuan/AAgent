@@ -2,7 +2,15 @@ import unittest
 
 from pydantic import ValidationError
 
-from workflows import WORKFLOW_SCHEMA_VERSION, WorkflowRequest, filter_invalid_connections, node_format_error
+from workflows import (
+    WORKFLOW_SCHEMA_VERSION,
+    WorkflowNodeReference,
+    WorkflowRequest,
+    filter_invalid_connections,
+    node_format_error,
+    remap_workflow_node_names,
+    synchronize_workflow_nodes,
+)
 
 
 class WorkflowSchemaVersionTest(unittest.TestCase):
@@ -33,6 +41,36 @@ class WorkflowSchemaVersionTest(unittest.TestCase):
 
 
 class WorkflowConnectionFilterTest(unittest.TestCase):
+    def test_dependency_rename_remaps_only_matching_canvas_nodes_and_refreshes_ports(self):
+        nodes = [
+            {
+                "id": "call-child",
+                "type": "workflow",
+                "arguments": {"workflow_name": "Old child"},
+                "input_ports": [{"name": "old", "type": "content"}],
+                "output_ports": [],
+            },
+            {"id": "call-other", "type": "workflow", "arguments": {"workflow_name": "Other"}},
+        ]
+        references = [
+            WorkflowNodeReference(name="New child", previous_name="Old child"),
+            WorkflowNodeReference(name="Other"),
+        ]
+
+        remapped = remap_workflow_node_names(nodes, references)
+        synchronized, _ = synchronize_workflow_nodes(
+            remapped,
+            [],
+            [
+                {"name": "New child", "input_ports": [{"name": "value", "type": "content"}], "output_ports": []},
+                {"name": "Other", "input_ports": [], "output_ports": []},
+            ],
+        )
+
+        self.assertEqual(synchronized[0]["arguments"]["workflow_name"], "New child")
+        self.assertEqual(synchronized[0]["input_ports"], [{"name": "value", "type": "content"}])
+        self.assertEqual(synchronized[1]["arguments"]["workflow_name"], "Other")
+
     def test_preserves_session_id_and_value_connections(self):
         nodes = [
             {"id": "input", "type": "input", "workflowPorts": [{"id": "workflow:value", "name": "value", "type": "content"}]},
