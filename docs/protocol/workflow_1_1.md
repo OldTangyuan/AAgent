@@ -71,7 +71,12 @@
 
 管理页还保存描述、引用和时间等元数据；MongoDB `_id` 是存储标识，不属于连线或节点字段。协议版本由顶层 `schema_version` 表达，不再有单独的整数版本字段。可执行性的依据是 `agent/workflow_validator.py` 中的 `validate_workflow`，管理页保存时另有大小、数量和引用限制。不能只检查 JSON 能否解析就认为 Workflow 有效。
 
-## 2. 节点与连线
+## 2. 元数据
+
+`name` ， `schema_version`、`input_ports` ， `output_ports` 为workflow的元数据
+其中,`name`是workflow的唯一标识符,不可重名
+
+## 3. 节点与连线
 
 节点的基本字段是 `id`、`type`、`name`、`x`、`y` 和 `arguments`；可选的公共顶层字段包括 `workflowPorts`、`dataInputPorts`、`input_ports`、`output_ports`。节点类型相关的可配置参数必须放在 `arguments` 中，不能放到节点顶层；公共字段不能放进 `arguments`。`input` / `output` 节点的 `workflowPorts` 必须与顶层边界端口声明一致，ID 形如 `workflow:<name>`。
 
@@ -131,7 +136,7 @@ Workflow 是**端口与连线强类型**的：数据连接的 `type` 必须是�
 
 `validate_workflow` 校验的是**定义**（端口声明、连接类型、节点参数等），不是 Event `payload` 的实际值。入口的 `payload.get(...)` 和数据传播不统一验证 `str` / `dict` / `list` 的形状；部分节点在消费时自行检查（如 `llm` 的 `list-message`、`split_event` 的 `event`、`deserialize_json` 的声明输出），Context/Session 存取也校验对应 `value_type`。因此外部调用方应按上表提供值，不能把“定义通过校验”理解为“外部输入已通过类型校验”。
 
-## 3. 解析后的 `workflow_map`
+## 4. 解析后的 `workflow_map`
 
 Agent 的 `parse_workflow` 把持久化定义编译成 `workflow_map`（按原始 `nodes` 顺序排列的节点对象列表），供执行器按整数索引访问。以上面的 `echo` 为例，解析后、执行前的结构为：
 
