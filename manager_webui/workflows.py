@@ -698,8 +698,6 @@ def create_workflows_router(
                     return JSONResponse(status_code=400, content={"error": "Workflow 依赖名称重复或不存在"})
                 updates["workflow_nodes"] = [{"name": value, "input_ports": by_name[value].get("input_ports", []), "output_ports": by_name[value].get("output_ports", [])} for value in names]
             workflows.update_one({"_id": existing["_id"]}, {"$set": updates})
-            if next_name != name:
-                workflows.update_many({"$or": [{"workflow_nodes.name": name}, {"nodes": {"$elemMatch": {"type": "workflow", "arguments.workflow_name": name}}}]}, {"$set": {"workflow_nodes.$[reference].name": next_name, "nodes.$[node].arguments.workflow_name": next_name, "updated_at": datetime.now(timezone.utc)}}, array_filters=[{"reference.name": name}, {"node.type": "workflow", "node.arguments.workflow_name": name}])
             document = workflows.find_one({"_id": existing["_id"]})
         except PyMongoError:
             return JSONResponse(status_code=503, content={"error": "暂时无法更新 Workflow 元数据"})
