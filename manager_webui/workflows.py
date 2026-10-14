@@ -291,7 +291,7 @@ def synchronize_metadata_ports(
         }
         for node in nodes
     ]
-    return filter_invalid_connections(synchronized_nodes, connections, input_ports, output_ports)
+    return synchronized_nodes, filter_connections(connections, synchronized_nodes, input_ports, output_ports)
 
 
 def filter_invalid_connections(
