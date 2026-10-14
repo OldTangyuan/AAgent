@@ -473,10 +473,9 @@ def create_workflows_router(
         return save_workflow(name, payload, overwrite=True)
 
     def save_workflow(name: str, payload: WorkflowRequest, overwrite: bool):
-        name = name.strip()
         if not name:
             return JSONResponse(status_code=400, content={"error": "Workflow 名称不能为空"})
-        if payload.name.strip() != name:
+        if payload.name != name:
             return JSONResponse(status_code=400, content={"error": "请求路径名称必须与 Workflow JSON 的 name 一致"})
         try:
             existing = workflows.find_one({"name": name})
@@ -559,7 +558,7 @@ def create_workflows_router(
     @router.patch("/api/workflow/{name}/metadata")
     def update_workflow_metadata(name: str, payload: WorkflowMetadataPatchRequest):
         # 改名和删除只作用于目标 Workflow，不级联改写其他引用处；全量同步代价大且没有功能收益。
-        next_name = payload.name.strip()
+        next_name = payload.name
         try:
             existing = workflows.find_one({"name": name})
             if existing is None:

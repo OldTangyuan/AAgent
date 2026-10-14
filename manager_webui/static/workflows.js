@@ -408,16 +408,16 @@ function openRenameDialog() {
 }
 
 function validateWorkflowName(input, error, submit, excludedWorkflowName = null) {
-  const name = input.value.trim();
+  const name = input.value;
   const duplicate = state.workflows.some((workflow) => workflow.name !== excludedWorkflowName && workflow.name === name);
-  error.textContent = !name ? 'Workflows 名称不能为空' : duplicate ? 'Workflows 名称已存在，可选择覆盖' : '';
+  error.textContent = !name ? 'Workflows 名称不能为空' : !name.trim() ? '不建议使用空白名称' : duplicate ? 'Workflows 名称已存在，可选择覆盖' : '';
   submit.disabled = !name || duplicate || state.saving;
   return Boolean(name) && !duplicate;
 }
 
 function validateUploadName() {
-  const name = elements.uploadName.value.trim();
-  elements.uploadError.textContent = !name ? 'Workflows 名称不能为空' : '';
+  const name = elements.uploadName.value;
+  elements.uploadError.textContent = !name ? 'Workflows 名称不能为空' : !name.trim() ? '不建议使用空白名称' : '';
   elements.uploadSubmit.disabled = !name || state.saving;
   const duplicate = state.workflows.some((workflow) => workflow.name === name);
   elements.uploadOverwrite.disabled = !name || !duplicate || state.saving;
@@ -446,7 +446,7 @@ function parseWorkflowText(text) {
 function prepareWorkflowUpload(imported) {
   state.pendingUpload = imported;
   state.uploadMode = 'create';
-  elements.uploadName.value = typeof imported.name === 'string' ? imported.name.trim() : '';
+  elements.uploadName.value = typeof imported.name === 'string' ? imported.name : '';
   validateUploadName();
   elements.uploadDialog.showModal();
   elements.uploadName.focus();
@@ -497,7 +497,7 @@ async function confirmWorkflowUpload(event, overwrite = false) {
   event.preventDefault();
   if (!state.pendingUpload || state.saving || !validateUploadName()) return;
   const imported = state.pendingUpload;
-  const uploadName = elements.uploadName.value.trim();
+  const uploadName = elements.uploadName.value;
   const existing = state.workflows.find((workflow) => workflow.name === uploadName);
   if (existing && !overwrite) {
     elements.uploadError.textContent = 'Workflows 名称已存在，请选择覆盖';
@@ -542,7 +542,7 @@ async function submitRename(event) {
   elements.renameError.textContent = '';
   updateControls();
   try {
-    const renamed = workflowSummary(await renameWorkflow(workflow.name, elements.renameName.value.trim()));
+    const renamed = workflowSummary(await renameWorkflow(workflow.name, elements.renameName.value));
     const index = state.workflows.findIndex((item) => item.name === workflow.name);
     state.workflows[index] = renamed;
     state.workflowDetails.delete(workflow.name);

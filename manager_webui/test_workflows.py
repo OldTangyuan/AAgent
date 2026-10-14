@@ -4,6 +4,7 @@ from pydantic import ValidationError
 
 from workflows import (
     WORKFLOW_SCHEMA_VERSION,
+    WorkflowMetadataPatchRequest,
     WorkflowNodeReference,
     WorkflowRequest,
     filter_invalid_connections,
@@ -14,6 +15,20 @@ from workflows import (
 
 
 class WorkflowSchemaVersionTest(unittest.TestCase):
+    def test_workflow_names_reject_empty_but_preserve_whitespace(self):
+        with self.assertRaises(ValidationError):
+            WorkflowRequest.model_validate({"name": "", "schema_version": WORKFLOW_SCHEMA_VERSION})
+
+        payload = {
+            "name": "   ",
+            "schema_version": WORKFLOW_SCHEMA_VERSION,
+            "input_ports": [],
+            "output_ports": [],
+            "nodes": [{"id": "output", "type": "output", "workflowPorts": []}],
+        }
+        self.assertEqual(WorkflowRequest.model_validate(payload).name, "   ")
+        self.assertEqual(WorkflowMetadataPatchRequest(name="  ").name, "  ")
+
     def test_accepts_current_version_and_rejects_past_and_future_versions(self):
         payload = {
             "name": "echo",
