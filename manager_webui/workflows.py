@@ -13,6 +13,8 @@ from pymongo import DESCENDING
 from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
+from workflow_validator import WorkflowValidationError, validate_workflow
+
 MAX_WORKFLOW_NODES = 200
 MAX_WORKFLOW_CONNECTIONS = 1000
 MAX_WORKFLOW_METADATA_PORTS = 50
@@ -222,6 +224,8 @@ class WorkflowRequest(BaseModel):
     output_ports: list[WorkflowPortMetadata] = Field(max_length=MAX_WORKFLOW_METADATA_PORTS)
     nodes: list[dict[str, Any]] = Field(min_length=1, max_length=MAX_WORKFLOW_NODES)
     connections: list[dict[str, Any]] = Field(default_factory=list, max_length=MAX_WORKFLOW_CONNECTIONS)
+    workflow_nodes: list[dict[str, Any]] = Field(default_factory=list, max_length=MAX_WORKFLOW_NODE_REFERENCES)
+    remote_tools: list[dict[str, Any]] = Field(default_factory=list, max_length=MAX_REMOTE_TOOL_REFERENCES)
 
 
 class WorkflowCreateRequest(BaseModel):
@@ -234,6 +238,13 @@ class WorkflowRenameRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=120)
+
+
+class WorkflowMetadataPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=120)
+    workflow_nodes: list[dict[str, Any]] | None = None
 
 
 class WorkflowNodeReference(BaseModel):
@@ -251,15 +262,6 @@ class RemoteToolReference(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     input_ports: list[WorkflowPortMetadata] = Field(default_factory=list, max_length=MAX_WORKFLOW_METADATA_PORTS)
     output_ports: list[WorkflowPortMetadata] = Field(default_factory=list, max_length=MAX_WORKFLOW_METADATA_PORTS)
-
-
-class WorkflowMetadataRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    input_ports: list[WorkflowPortMetadata] = Field(default_factory=list, max_length=MAX_WORKFLOW_METADATA_PORTS)
-    output_ports: list[WorkflowPortMetadata] = Field(default_factory=list, max_length=MAX_WORKFLOW_METADATA_PORTS)
-    workflow_nodes: list[WorkflowNodeReference] = Field(default_factory=list, max_length=MAX_WORKFLOW_NODE_REFERENCES)
-    remote_tools: list[RemoteToolReference] = Field(default_factory=list, max_length=MAX_REMOTE_TOOL_REFERENCES)
 
 
 def duplicate_port_name(ports: list[WorkflowPortMetadata]) -> bool:
@@ -501,9 +503,31 @@ def synchronize_workflow_nodes(
     return synchronized_nodes, synchronized_connections
 
 
+def synchronize_workflow_node_snapshots(
+    nodes: list[dict[str, Any]],
+    references: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    references_by_name = {reference["name"]: reference for reference in references}
+    synchronized = []
+    for node in nodes:
+        if node.get("type") != "workflow":
+            synchronized.append(node)
+            continue
+        arguments = node_arguments(node)
+        reference = references_by_name.get(arguments.get("workflow_name"))
+        if reference is None:
+            synchronized.append(node)
+            continue
+        synchronized.append({
+            **node,
+            "input_ports": reference["input_ports"],
+            "output_ports": reference["output_ports"],
+        })
+    return synchronized
+
+
 def workflow_response(document: dict[str, Any]) -> dict[str, Any]:
     return {
-        "id": str(document["_id"]),
         "name": document.get("name", ""),
         "description": document.get("description", ""),
         "schema_version": document.get("schema_version"),
@@ -536,7 +560,6 @@ def create_workflows_router(
             return {
                 "items": [
                     {
-                        "id": str(item["_id"]),
                         "name": item.get("name", ""),
                         "description": item.get("description", ""),
                         "schema_version": item.get("schema_version"),
@@ -555,402 +578,141 @@ def create_workflows_router(
         except PyMongoError:
             return JSONResponse(status_code=503, content={"error": "Workflow 列表暂时不可用"})
 
-    @router.post("/api/workflows", status_code=201)
-    def create_workflow(payload: WorkflowCreateRequest):
-        name = payload.name.strip()
-        if not name:
-            return JSONResponse(status_code=400, content={"error": "Workflow 名称不能为空"})
-        now = datetime.now(timezone.utc)
-        document = {
-            "name": name,
-            "description": "",
-            "schema_version": WORKFLOW_SCHEMA_VERSION,
-            "nodes": [
-                {"id": "input", "type": "input", "name": "Input", "x": 120, "y": 238, "workflowPorts": []},
-                {"id": "output", "type": "output", "name": "Output", "x": 520, "y": 238, "workflowPorts": []},
-            ],
-            "connections": [
-                {
-                    "id": "control-input-output",
-                    "fromId": "input",
-                    "fromPortId": "control-out",
-                    "toId": "output",
-                    "toPortId": "control-in",
-                    "type": "control",
-                },
-            ],
-            "input_ports": [],
-            "output_ports": [],
-            "workflow_nodes": [],
-            "remote_tools": [],
-            "created_at": now,
-            "updated_at": now,
-        }
+    @router.get("/api/workflow/{name}")
+    def get_workflow(name: str):
         try:
-            if workflows.find_one({"name": name}, {"_id": 1}):
-                return JSONResponse(status_code=409, content={"error": "Workflow 名称已存在"})
-            result = workflows.insert_one(document)
-        except DuplicateKeyError:
-            return JSONResponse(status_code=409, content={"error": "Workflow 名称已存在"})
-        except PyMongoError:
-            return JSONResponse(status_code=503, content={"error": "暂时无法创建 Workflow"})
-        document["_id"] = result.inserted_id
-        return workflow_response(document)
-
-    def workflow_object_id(workflow_id: str) -> ObjectId | JSONResponse:
-        try:
-            return ObjectId(workflow_id)
-        except (InvalidId, TypeError):
-            return JSONResponse(status_code=400, content={"error": "Workflow id 无效"})
-
-    @router.get("/api/workflows/{workflow_id}")
-    def get_workflow(workflow_id: str):
-        object_id = workflow_object_id(workflow_id)
-        if isinstance(object_id, JSONResponse):
-            return object_id
-        try:
-            document = workflows.find_one({"_id": object_id})
+            document = workflows.find_one({"name": name})
         except PyMongoError:
             return JSONResponse(status_code=503, content={"error": "Workflow 暂时不可用"})
         if document is None:
             return JSONResponse(status_code=404, content={"error": "Workflow 不存在或已被删除"})
         return workflow_response(document)
 
-    @router.patch("/api/workflows/{workflow_id}")
-    def rename_workflow(workflow_id: str, payload: WorkflowRenameRequest):
-        name = payload.name.strip()
+    @router.post("/api/workflow/{name}", status_code=201)
+    def create_workflow(name: str, payload: WorkflowRequest):
+        return save_workflow(name, payload, overwrite=False)
+
+    @router.put("/api/workflow/{name}")
+    def overwrite_workflow(name: str, payload: WorkflowRequest):
+        return save_workflow(name, payload, overwrite=True)
+
+    def save_workflow(name: str, payload: WorkflowRequest, overwrite: bool):
+        name = name.strip()
         if not name:
             return JSONResponse(status_code=400, content={"error": "Workflow 名称不能为空"})
-        object_id = workflow_object_id(workflow_id)
-        if isinstance(object_id, JSONResponse):
-            return object_id
+        if payload.name.strip() != name:
+            return JSONResponse(status_code=400, content={"error": "请求路径名称必须与 Workflow JSON 的 name 一致"})
         try:
-            if workflows.find_one({"name": name, "_id": {"$ne": object_id}}, {"_id": 1}):
+            existing = workflows.find_one({"name": name})
+            if overwrite and existing is None:
+                return JSONResponse(status_code=404, content={"error": "Workflow 不存在或已被删除"})
+            if not overwrite and existing is not None:
                 return JSONResponse(status_code=409, content={"error": "Workflow 名称已存在"})
-            existing = workflows.find_one({"_id": object_id}, {"name": 1})
-            if existing is None:
-                return JSONResponse(status_code=404, content={"error": "Workflow 不存在或已被删除"})
-            previous_name = existing.get("name", "")
-            document = workflows.find_one_and_update(
-                {"_id": object_id},
-                {"$set": {"name": name, "updated_at": datetime.now(timezone.utc)}},
-                return_document=True,
-            )
-            if previous_name != name:
-                workflows.update_many(
-                    {
-                        "$or": [
-                            {"workflow_nodes.name": previous_name},
-                            {"nodes": {"$elemMatch": {"type": "workflow", "arguments.workflow_name": previous_name}}},
-                        ]
-                    },
-                    {"$set": {
-                        "workflow_nodes.$[reference].name": name,
-                        "nodes.$[node].arguments.workflow_name": name,
-                        "updated_at": datetime.now(timezone.utc),
-                    }},
-                    array_filters=[
-                        {"reference.name": previous_name},
-                        {"node.type": "workflow", "node.arguments.workflow_name": previous_name},
-                    ],
-                )
-        except DuplicateKeyError:
-            return JSONResponse(status_code=409, content={"error": "Workflow 名称已存在"})
-        except PyMongoError:
-            return JSONResponse(status_code=503, content={"error": "暂时无法重命名 Workflow"})
-        if document is None:
-            return JSONResponse(status_code=404, content={"error": "Workflow 不存在或已被删除"})
-        return workflow_response(document)
-
-    @router.put("/api/workflows/{workflow_id}/metadata")
-    def update_workflow_metadata(workflow_id: str, payload: WorkflowMetadataRequest):
-        if duplicate_port_name(payload.input_ports):
-            return JSONResponse(status_code=400, content={"error": "输入 Port 名称不能为空或重名"})
-        if duplicate_port_name(payload.output_ports):
-            return JSONResponse(status_code=400, content={"error": "输出 Port 名称不能为空或重名"})
-        input_ports = [port.model_dump() | {"name": port.name.strip()} for port in payload.input_ports]
-        output_ports = [port.model_dump() | {"name": port.name.strip()} for port in payload.output_ports]
-        remote_tool_names = [tool.name.strip() for tool in payload.remote_tools]
-        normalized_remote_tool_names = [name.casefold() for name in remote_tool_names]
-        if any(not name for name in remote_tool_names) or len(normalized_remote_tool_names) != len(set(normalized_remote_tool_names)):
-            return JSONResponse(status_code=400, content={"error": "Remote Tool 名称不能为空或重复"})
-        if any(duplicate_port_name(tool.input_ports) or duplicate_port_name(tool.output_ports) for tool in payload.remote_tools):
-            return JSONResponse(status_code=400, content={"error": "Remote Tool 端口名称不能为空或重复"})
-        remote_tools = [
-            {
-                "name": name,
-                "input_ports": [port.model_dump() | {"name": port.name.strip()} for port in tool.input_ports],
-                "output_ports": [port.model_dump() | {"name": port.name.strip()} for port in tool.output_ports],
-            }
-            for tool, name in zip(payload.remote_tools, remote_tool_names)
-        ]
-        object_id = workflow_object_id(workflow_id)
-        if isinstance(object_id, JSONResponse):
-            return object_id
-        workflow_node_names = [reference.name.strip() for reference in payload.workflow_nodes]
-        if any(not name for name in workflow_node_names):
-            return JSONResponse(status_code=400, content={"error": "引入的 Workflow 名称不能为空"})
-        if len(workflow_node_names) != len(set(workflow_node_names)):
-            return JSONResponse(status_code=400, content={"error": "引入的 Workflow 不能重复"})
-        try:
-            existing = workflows.find_one({"_id": object_id})
-            if existing is None:
-                return JSONResponse(status_code=404, content={"error": "Workflow 不存在或已被删除"})
-            if existing.get("name") in workflow_node_names:
+            if duplicate_port_name(payload.input_ports) or duplicate_port_name(payload.output_ports):
+                return JSONResponse(status_code=400, content={"error": "Workflow 边界端口名称不能为空或重名"})
+            input_ports = [port.model_dump() | {"name": port.name.strip()} for port in payload.input_ports]
+            output_ports = [port.model_dump() | {"name": port.name.strip()} for port in payload.output_ports]
+            references = payload.workflow_nodes
+            reference_names = [item.get("name", "").strip() for item in references]
+            if any(not reference_name for reference_name in reference_names) or len(reference_names) != len(set(reference_names)):
+                return JSONResponse(status_code=400, content={"error": "Workflow 依赖名称不能为空或重复"})
+            if name in reference_names:
                 return JSONResponse(status_code=400, content={"error": "Workflow 不能引入自身"})
-            referenced_workflows = list(workflows.find(
-                {"name": {"$in": workflow_node_names}},
-                {"name": 1, "input_ports": 1, "output_ports": 1},
-            ))
-            if len(referenced_workflows) != len(workflow_node_names):
+            referenced = list(workflows.find({"name": {"$in": reference_names}})) if reference_names else []
+            by_name = {item.get("name"): item for item in referenced}
+            if len(by_name) != len(reference_names):
                 return JSONResponse(status_code=400, content={"error": "引入的 Workflow 不存在或已被删除"})
-            referenced_by_name = {workflow["name"]: workflow for workflow in referenced_workflows}
-            existing_by_name = {
-                reference.get("name"): reference
-                for reference in existing.get("workflow_nodes", [])
-            }
-            workflow_nodes = [
-                {
-                    "name": reference_name,
-                    "input_ports": (
-                        [port.model_dump() for port in reference.input_ports]
-                        if reference.input_ports is not None
-                        else referenced_by_name[reference_name].get("input_ports", [])
-                    ),
-                    "output_ports": (
-                        [port.model_dump() for port in reference.output_ports]
-                        if reference.output_ports is not None
-                        else referenced_by_name[reference_name].get("output_ports", [])
-                    ),
-                }
-                for reference, reference_name in zip(payload.workflow_nodes, workflow_node_names)
-            ]
-            renamed_workflow_nodes = {
-                reference.previous_name.strip(): reference.name.strip()
-                for reference in payload.workflow_nodes
-                if reference.previous_name and reference.previous_name.strip() != reference.name.strip()
-            }
-            nodes, connections = synchronize_metadata_ports(
-                existing.get("nodes", []), existing.get("connections", []), input_ports, output_ports
-            )
-            if renamed_workflow_nodes:
-                nodes = [
-                    {
-                        **node,
-                        "arguments": {
-                            **node_arguments(node),
-                            "workflow_name": renamed_workflow_nodes.get(
-                                node_arguments(node).get("workflow_name"),
-                                node_arguments(node).get("workflow_name"),
-                            ),
-                        },
-                    }
-                    if node.get("type") == "workflow" and node_arguments(node).get("workflow_name") in renamed_workflow_nodes
-                    else node
-                    for node in nodes
-                ]
-            nodes, connections = synchronize_workflow_nodes(nodes, connections, workflow_nodes)
-            nodes, connections = filter_invalid_connections(nodes, connections, input_ports, output_ports)
-            document = workflows.find_one_and_update(
-                {"_id": object_id},
-                {"$set": {
-                    "input_ports": input_ports,
-                    "output_ports": output_ports,
-                    "workflow_nodes": workflow_nodes,
-                    "remote_tools": remote_tools,
-                    "nodes": nodes,
-                    "connections": connections,
-                    "updated_at": datetime.now(timezone.utc),
-                }},
-                return_document=True,
-            )
-        except PyMongoError:
-            return JSONResponse(status_code=503, content={"error": "暂时无法保存 Workflow 元数据"})
-        if document is None:
-            return JSONResponse(status_code=404, content={"error": "Workflow 不存在或已被删除"})
-        return workflow_response(document)
-
-    @router.delete("/api/workflows/{workflow_id}")
-    def delete_workflow(workflow_id: str):
-        object_id = workflow_object_id(workflow_id)
-        if isinstance(object_id, JSONResponse):
-            return object_id
-        try:
-            result = workflows.delete_one({"_id": object_id})
-        except PyMongoError:
-            return JSONResponse(status_code=503, content={"error": "暂时无法删除 Workflow"})
-        if result.deleted_count == 0:
-            return JSONResponse(status_code=404, content={"error": "Workflow 不存在或已被删除"})
-        return {"deleted": True, "id": workflow_id}
-
-    @router.put("/api/workflows/{workflow_id}")
-    def update_workflow(workflow_id: str, payload: WorkflowRequest):
-        object_id = workflow_object_id(workflow_id)
-        if isinstance(object_id, JSONResponse):
-            return object_id
-        if not payload.name.strip():
-            return JSONResponse(status_code=400, content={"error": "Workflow 名称不能为空"})
-
-        node_ids = [node.get("id") for node in payload.nodes]
-        if any(not isinstance(node_id, str) or not node_id for node_id in node_ids):
-            return JSONResponse(status_code=400, content={"error": "每个节点都必须包含有效的 id"})
-        if len(node_ids) != len(set(node_ids)):
-            return JSONResponse(status_code=400, content={"error": "Workflow 中存在重复的节点 id"})
-        node_id_set = set(node_ids)
-        for connection in payload.connections:
-            if connection.get("fromId") not in node_id_set or connection.get("toId") not in node_id_set:
-                return JSONResponse(status_code=400, content={"error": "连接引用了不存在的节点"})
-
-        valid_node_types = set(NODE_ARGUMENT_FIELDS_BY_TYPE)
-        if any(node.get("type") not in valid_node_types for node in payload.nodes):
-            return JSONResponse(status_code=400, content={"error": "Workflow 包含不支持的节点类型"})
-        for index, node in enumerate(payload.nodes):
-            format_error = node_format_error(node, index)
-            if format_error:
-                return JSONResponse(status_code=400, content={"error": format_error})
-        if not any(node.get("type") == "output" for node in payload.nodes):
-            return JSONResponse(status_code=400, content={"error": "Workflow 必须至少包含一个 Output 节点"})
-        if any(
-            node.get("type") in {"input", "output"}
-            and not isinstance(node.get("workflowPorts"), list)
-            for node in payload.nodes
-        ):
-            return JSONResponse(status_code=400, content={"error": "Input 和 Output 节点必须声明 workflowPorts"})
-
-        workflow_nodes = [node for node in payload.nodes if node.get("type") == "workflow"]
-        workflow_document = workflows.find_one(
-            {"_id": object_id},
-            {"name": 1, "workflow_nodes": 1, "remote_tools": 1, "input_ports": 1, "output_ports": 1},
-        )
-        if workflow_document is None:
-            return JSONResponse(status_code=404, content={"error": "Workflow 不存在或已被删除"})
-        if (
-            [port.model_dump() for port in payload.input_ports] != workflow_document.get("input_ports", [])
-            or [port.model_dump() for port in payload.output_ports] != workflow_document.get("output_ports", [])
-        ):
-            return JSONResponse(status_code=400, content={"error": "Workflow 边界端口与当前元数据不一致，请刷新后重试"})
-        allowed_workflow_nodes = {
-            reference.get("name"): reference
-            for reference in workflow_document.get("workflow_nodes", [])
-        }
-        for node in workflow_nodes:
-            reference = allowed_workflow_nodes.get(node_arguments(node).get("workflow_name"))
-            if reference is None:
-                return JSONResponse(status_code=400, content={"error": "Workflow 节点未在元数据中引入"})
-            if node.get("input_ports") != reference.get("input_ports", []) or node.get("output_ports") != reference.get("output_ports", []):
-                return JSONResponse(status_code=400, content={"error": "Workflow 节点端口与元数据契约不一致"})
-
-        remote_tools = {
-            tool.get("name"): tool
-            for tool in workflow_document.get("remote_tools", [])
-        }
-        for node in payload.nodes:
-            if node.get("type") not in {"remote_sync_tool", "remote_async_tool"}:
-                continue
-            arguments = node_arguments(node)
-            tool = remote_tools.get(arguments.get("tool"))
-            if tool is None:
-                return JSONResponse(status_code=400, content={"error": "Remote Tool 节点未在元数据中注册"})
-            if arguments.get("parameters") != tool.get("input_ports", []):
-                return JSONResponse(status_code=400, content={"error": "Remote Tool 节点输入端口与元数据契约不一致"})
-            if node.get("type") == "remote_sync_tool" and arguments.get("outputs") != tool.get("output_ports", []):
-                return JSONResponse(status_code=400, content={"error": "Remote Sync Tool 节点输出端口与元数据契约不一致"})
-
-        max_wait_ms = int(os.getenv("TOOL_CLIENT_MAX_WAIT_MS", "10000"))
-        max_async_timeout_ms = int(os.getenv("TOOL_CLIENT_MAX_ASYNC_TIMEOUT_MS", "3600000"))
-        for node in payload.nodes:
-            if node.get("type") in {"local_tool", "remote_sync_tool", "remote_async_tool"}:
-                error = tool_node_error(node, max_wait_ms, max_async_timeout_ms)
-                if error:
-                    return JSONResponse(status_code=400, content={"error": error})
-
-        local_tool_nodes = [node for node in payload.nodes if node.get("type") == "local_tool"]
-        if local_tool_nodes:
+            canonical_references = []
+            for reference in references:
+                actual = by_name[reference["name"].strip()]
+                input_contract = [port.model_dump() for port in reference.get("input_ports", [])]
+                output_contract = [port.model_dump() for port in reference.get("output_ports", [])]
+                if input_contract != actual.get("input_ports", []) or output_contract != actual.get("output_ports", []):
+                    return JSONResponse(status_code=400, content={"error": f"Workflow 依赖 {actual['name']} 的端口契约不一致"})
+                canonical_references.append({"name": actual["name"], "input_ports": input_contract, "output_ports": output_contract})
+            values = payload.model_dump()
+            values["nodes"] = synchronize_workflow_node_snapshots(values["nodes"], canonical_references)
+            values.update({"name": name, "input_ports": input_ports, "output_ports": output_ports, "workflow_nodes": canonical_references})
             try:
-                registered_tool_names = set(redis_client.hkeys(tools_key))
-            except redis.RedisError:
-                return JSONResponse(status_code=503, content={"error": "暂时无法校验 Tool 注册表"})
-            if any(node_arguments(node).get("tool") not in registered_tool_names for node in local_tool_nodes):
-                return JSONResponse(status_code=400, content={"error": "Tool 节点引用了未注册的工具"})
-            try:
-                schemas = redis_client.hmget(tools_key, [node_arguments(node).get("tool") for node in local_tool_nodes])
-                tool_properties = {
-                    node_arguments(node).get("tool"): set(json.loads(raw).get("function", {}).get("parameters", {}).get("properties", {}))
-                    for node, raw in zip(local_tool_nodes, schemas)
-                    if raw
-                }
-            except (redis.RedisError, TypeError, ValueError):
-                return JSONResponse(status_code=503, content={"error": "暂时无法读取 Tool 参数定义"})
-            for node in local_tool_nodes:
-                parameters = node_arguments(node).get("parameters", [])
-                expected = tool_properties.get(node_arguments(node).get("tool"))
-                if set(parameters) != expected:
-                    return JSONResponse(status_code=400, content={"error": "Tool 节点参数端口与工具定义不一致"})
-
-        llm_nodes = [node for node in payload.nodes if node.get("type") == "llm"]
-        try:
-            model_ids = [ObjectId(node_arguments(node).get("model", "")) for node in llm_nodes]
-        except (InvalidId, TypeError):
-            return JSONResponse(status_code=400, content={"error": "LLM 节点必须选择有效的模型配置"})
-        try:
-            available_model_ids = {
-                item["_id"] for item in model_configs.find({"_id": {"$in": model_ids}, "enabled": True}, {"_id": 1})
-            }
+                validate_workflow(values)
+            except WorkflowValidationError as error:
+                return JSONResponse(status_code=400, content={"error": str(error)})
+            max_wait_ms = int(os.getenv("TOOL_CLIENT_MAX_WAIT_MS", "10000"))
+            max_async_timeout_ms = int(os.getenv("TOOL_CLIENT_MAX_ASYNC_TIMEOUT_MS", "3600000"))
+            for node in values["nodes"]:
+                if node.get("type") in {"local_tool", "remote_sync_tool", "remote_async_tool"}:
+                    error = tool_node_error(node, max_wait_ms, max_async_timeout_ms)
+                    if error:
+                        return JSONResponse(status_code=400, content={"error": error})
+            local_tools = [node for node in values["nodes"] if node.get("type") == "local_tool"]
+            if local_tools:
+                registered = {value.decode() if isinstance(value, bytes) else value for value in redis_client.hkeys(tools_key)}
+                if any(node_arguments(node).get("tool") not in registered for node in local_tools):
+                    return JSONResponse(status_code=400, content={"error": "Tool 节点引用了未注册的工具"})
+            model_nodes = [node for node in values["nodes"] if node.get("type") == "llm"]
+            model_ids = [ObjectId(node_arguments(node).get("model", "")) for node in model_nodes]
+            available = {item["_id"] for item in model_configs.find({"_id": {"$in": model_ids}, "enabled": True}, {"_id": 1})} if model_ids else set()
+            if any(model_id not in available for model_id in model_ids):
+                return JSONResponse(status_code=400, content={"error": "LLM 节点引用了不存在或已停用的模型配置"})
+        except (InvalidId, TypeError, ValueError, KeyError) as error:
+            return JSONResponse(status_code=400, content={"error": f"Workflow 契约无效: {error}"})
+        except redis.RedisError:
+            return JSONResponse(status_code=503, content={"error": "暂时无法校验 Tool 注册表"})
         except PyMongoError:
-            return JSONResponse(status_code=503, content={"error": "暂时无法校验模型配置"})
-        if any(model_id not in available_model_ids for model_id in model_ids):
-            return JSONResponse(status_code=400, content={"error": "LLM 节点引用了不存在或已停用的模型配置"})
+            return JSONResponse(status_code=503, content={"error": "暂时无法校验或保存 Workflow"})
 
         now = datetime.now(timezone.utc)
-        synchronized_nodes, synchronized_connections = synchronize_metadata_ports(
-            payload.nodes,
-            payload.connections,
-            workflow_document.get("input_ports", []),
-            workflow_document.get("output_ports", []),
-        )
-        synchronized_nodes, synchronized_connections = filter_invalid_connections(
-            synchronized_nodes,
-            synchronized_connections,
-            workflow_document.get("input_ports", []),
-            workflow_document.get("output_ports", []),
-        )
-        values = payload.model_dump(exclude={"input_ports", "output_ports"})
-        values["nodes"] = synchronized_nodes
-        values["connections"] = synchronized_connections
-        values["name"] = values["name"].strip()
         values["description"] = values["description"].strip()
         values["updated_at"] = now
         try:
-            if workflows.find_one({"name": values["name"], "_id": {"$ne": object_id}}, {"_id": 1}):
-                return JSONResponse(status_code=409, content={"error": "Workflow 名称已存在"})
-            document = workflows.find_one_and_update(
-                {"_id": object_id},
-                {"$set": values, "$setOnInsert": {"created_at": now}},
-                return_document=True,
-            )
-            previous_name = workflow_document.get("name", "")
-            if previous_name != values["name"]:
-                workflows.update_many(
-                    {
-                        "$or": [
-                            {"workflow_nodes.name": previous_name},
-                            {"nodes": {"$elemMatch": {"type": "workflow", "arguments.workflow_name": previous_name}}},
-                        ]
-                    },
-                    {"$set": {
-                        "workflow_nodes.$[reference].name": values["name"],
-                        "nodes.$[node].arguments.workflow_name": values["name"],
-                        "updated_at": now,
-                    }},
-                    array_filters=[
-                        {"reference.name": previous_name},
-                        {"node.type": "workflow", "node.arguments.workflow_name": previous_name},
-                    ],
-                )
+            if overwrite:
+                values["created_at"] = existing.get("created_at", now)
+                workflows.replace_one({"_id": existing["_id"]}, values)
+                document = workflows.find_one({"_id": existing["_id"]})
+            else:
+                values["created_at"] = now
+                result = workflows.insert_one(values)
+                values["_id"] = result.inserted_id
+                document = values
         except DuplicateKeyError:
             return JSONResponse(status_code=409, content={"error": "Workflow 名称已存在"})
         except PyMongoError:
             return JSONResponse(status_code=503, content={"error": "暂时无法保存 Workflow"})
         return workflow_response(document)
+
+    @router.patch("/api/workflow/{name}/metadata")
+    def update_workflow_metadata(name: str, payload: WorkflowMetadataPatchRequest):
+        next_name = payload.name.strip()
+        try:
+            existing = workflows.find_one({"name": name})
+            if existing is None:
+                return JSONResponse(status_code=404, content={"error": "Workflow 不存在或已被删除"})
+            if workflows.find_one({"name": next_name, "_id": {"$ne": existing["_id"]}}):
+                return JSONResponse(status_code=409, content={"error": "Workflow 名称已存在"})
+            updates = {"name": next_name, "updated_at": datetime.now(timezone.utc)}
+            if payload.workflow_nodes is not None:
+                names = [reference.get("name", "").strip() for reference in payload.workflow_nodes]
+                targets = list(workflows.find({"name": {"$in": names}})) if names else []
+                by_name = {target["name"]: target for target in targets}
+                if len(names) != len(set(names)) or any(target not in by_name for target in names):
+                    return JSONResponse(status_code=400, content={"error": "Workflow 依赖名称重复或不存在"})
+                updates["workflow_nodes"] = [{"name": value, "input_ports": by_name[value].get("input_ports", []), "output_ports": by_name[value].get("output_ports", [])} for value in names]
+            workflows.update_one({"_id": existing["_id"]}, {"$set": updates})
+            if next_name != name:
+                workflows.update_many({"$or": [{"workflow_nodes.name": name}, {"nodes": {"$elemMatch": {"type": "workflow", "arguments.workflow_name": name}}}]}, {"$set": {"workflow_nodes.$[reference].name": next_name, "nodes.$[node].arguments.workflow_name": next_name, "updated_at": datetime.now(timezone.utc)}}, array_filters=[{"reference.name": name}, {"node.type": "workflow", "node.arguments.workflow_name": name}])
+            document = workflows.find_one({"_id": existing["_id"]})
+        except PyMongoError:
+            return JSONResponse(status_code=503, content={"error": "暂时无法更新 Workflow 元数据"})
+        return workflow_response(document)
+
+    @router.delete("/api/workflow/{name}")
+    def delete_workflow(name: str):
+        try:
+            result = workflows.delete_one({"name": name})
+        except PyMongoError:
+            return JSONResponse(status_code=503, content={"error": "暂时无法删除 Workflow"})
+        if result.deleted_count == 0:
+            return JSONResponse(status_code=404, content={"error": "Workflow 不存在或已被删除"})
+        return {"deleted": True, "name": name}
 
     return router

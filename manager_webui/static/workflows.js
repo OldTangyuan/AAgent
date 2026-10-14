@@ -1,4 +1,4 @@
-import { createWorkflow, deleteWorkflow, fetchWorkflow, fetchWorkflows, renameWorkflow, updateWorkflowMetadata, uploadWorkflow } from './api.js';
+import { deleteWorkflow, fetchWorkflow, fetchWorkflows, renameWorkflow, uploadWorkflow } from './api.js';
 import { workflowCanvasFilename, workflowCanvasSvg } from './workflow_canvas.mjs';
 
 const state = { workflows: [], selectedId: null, loading: false, saving: false, pendingUpload: null, uploadMode: 'create', workflowDetails: new Map() };
@@ -44,7 +44,7 @@ const elements = {
 };
 
 function selectedWorkflow() {
-  return state.workflows.find((workflow) => workflow.id === state.selectedId) || null;
+  return state.workflows.find((workflow) => workflow.name === state.selectedId) || null;
 }
 
 function workflowSummary(workflow) {
@@ -216,7 +216,7 @@ function editDependency(item, references, currentName) {
   saveButton.textContent = '保存';
   const updateSaveState = () => {
     const name = input.value.trim();
-    const exists = state.workflows.some((workflow) => workflow.id !== state.selectedId && workflow.name === name);
+    const exists = state.workflows.some((workflow) => workflow.name !== state.selectedId && workflow.name === name);
     const duplicate = references.some((reference) => {
       const referenceValue = reference.name || reference.workflow_name;
       return referenceValue !== currentName && referenceValue === name;
@@ -248,16 +248,13 @@ function editDependency(item, references, currentName) {
 async function saveDependency(references, previousName, nextName) {
   const workflow = selectedWorkflow();
   if (!workflow || state.saving || !nextName || nextName === previousName) return;
-  const target = state.workflows.find((item) => item.id !== workflow.id && item.name === nextName);
+  const target = state.workflows.find((item) => item.name === nextName);
   if (!target) {
     elements.state.textContent = '依赖 Workflows 不存在，无法保存';
     return;
   }
   const nextReferences = references.map((reference) => ({
     name: (reference.name || reference.workflow_name) === previousName ? nextName : reference.name || reference.workflow_name,
-    input_ports: reference.input_ports || [],
-    output_ports: reference.output_ports || [],
-    ...(reference.name === previousName || reference.workflow_name === previousName ? { previous_name: previousName } : {}),
   }));
   if (new Set(nextReferences.map((reference) => reference.name)).size !== nextReferences.length) {
     elements.state.textContent = '依赖 Workflows 不能重复';
@@ -267,16 +264,10 @@ async function saveDependency(references, previousName, nextName) {
   elements.state.textContent = '保存依赖中';
   updateControls();
   try {
-    const updated = workflowSummary(await updateWorkflowMetadata(
-      workflow.id,
-      workflow.input_ports || [],
-      workflow.output_ports || [],
-      nextReferences,
-      workflow.remote_tools || [],
-    ));
-    const index = state.workflows.findIndex((item) => item.id === workflow.id);
+    const updated = workflowSummary(await renameWorkflow(workflow.name, workflow.name, nextReferences));
+    const index = state.workflows.findIndex((item) => item.name === workflow.name);
     state.workflows[index] = { ...state.workflows[index], ...updated };
-    state.workflowDetails.delete(workflow.id);
+    state.workflowDetails.delete(workflow.name);
     elements.state.textContent = '依赖已更新';
     renderList();
     renderConfiguration();
@@ -316,7 +307,7 @@ function renderConfiguration() {
   renderPortList(elements.outputPorts, workflow.output_ports || []);
   renderDependencies(workflow.workflow_nodes || []);
   renderRemoteTools(workflow.remote_tools || []);
-  renderCanvasPreview(workflow.id);
+  renderCanvasPreview(workflow.name);
 }
 
 function parseCanvasSvg(workflow) {
@@ -380,7 +371,7 @@ function renderList() {
   }
   for (const workflow of state.workflows) {
     const button = document.createElement('button');
-    button.className = `workflow-management-item${workflow.id === state.selectedId ? ' active' : ''}`;
+    button.className = `workflow-management-item${workflow.name === state.selectedId ? ' active' : ''}`;
     button.type = 'button';
 
     const title = document.createElement('strong');
@@ -389,7 +380,7 @@ function renderList() {
     meta.textContent = `${workflow.node_count} 节点 / ${workflow.connection_count} 连接`;
 
   button.append(title, meta);
-    button.addEventListener('click', () => selectWorkflow(workflow.id));
+    button.addEventListener('click', () => selectWorkflow(workflow.name));
     elements.list.append(button);
   }
 }
@@ -403,8 +394,8 @@ async function loadWorkflows() {
   try {
     const response = await fetchWorkflows();
     state.workflows = response.items;
-    if (!state.workflows.some((workflow) => workflow.id === state.selectedId)) {
-      state.selectedId = state.workflows[0]?.id || null;
+    if (!state.workflows.some((workflow) => workflow.name === state.selectedId)) {
+      state.selectedId = state.workflows[0]?.name || null;
     }
     elements.state.textContent = `共 ${state.workflows.length} 个`;
   } catch (error) {
@@ -429,9 +420,9 @@ function openRenameDialog() {
   elements.renameName.select();
 }
 
-function validateWorkflowName(input, error, submit, excludedWorkflowId = null) {
+function validateWorkflowName(input, error, submit, excludedWorkflowName = null) {
   const name = input.value.trim();
-  const duplicate = state.workflows.some((workflow) => workflow.id !== excludedWorkflowId && workflow.name === name);
+  const duplicate = state.workflows.some((workflow) => workflow.name !== excludedWorkflowName && workflow.name === name);
   error.textContent = !name ? 'Workflows 名称不能为空' : duplicate ? 'Workflows 名称已存在，可选择覆盖' : '';
   submit.disabled = !name || duplicate || state.saving;
   return Boolean(name) && !duplicate;
@@ -439,48 +430,23 @@ function validateWorkflowName(input, error, submit, excludedWorkflowId = null) {
 
 function validateUploadName() {
   const name = elements.uploadName.value.trim();
+  elements.uploadError.textContent = !name ? 'Workflows 名称不能为空' : '';
+  elements.uploadSubmit.disabled = !name || state.saving;
   const duplicate = state.workflows.some((workflow) => workflow.name === name);
-  elements.uploadError.textContent = !name ? 'Workflows 名称不能为空' : duplicate ? 'Workflows 名称已存在，可选择覆盖' : '';
-  elements.uploadSubmit.disabled = !name || duplicate || state.saving;
   elements.uploadOverwrite.disabled = !name || !duplicate || state.saving;
   state.uploadMode = duplicate ? 'overwrite' : 'create';
-  return Boolean(name) && !duplicate;
+  return Boolean(name);
 }
 
 function validateRenameName() {
   return validateWorkflowName(elements.renameName, elements.renameError, elements.renameSubmit, state.selectedId);
 }
 
-function resolveWorkflowReferences(imported) {
-  const references = Array.isArray(imported.workflow_nodes) ? imported.workflow_nodes : [];
-  const resolvedReferences = new Map();
-  const workflowNodes = references.map((reference) => {
-    const referenceName = reference.name || reference.workflow_name || reference.workflow_id;
-    const matches = state.workflows.filter((workflow) => workflow.id === reference.workflow_id || workflow.name === referenceName);
-    if (matches.length !== 1) {
-      throw new Error(matches.length ? `被调用 Workflows“${referenceName}”名称不唯一` : `找不到被调用 Workflows“${referenceName}”`);
-    }
-    if (reference.workflow_id) resolvedReferences.set(reference.workflow_id, matches[0]);
-    resolvedReferences.set(referenceName, matches[0]);
-    return { name: matches[0].name };
-  });
-  const nodes = imported.nodes.map((node) => {
-    if (node.type !== 'workflow') return node;
-    const resolved = resolvedReferences.get(node.workflow_id) || resolvedReferences.get(node.workflow_name);
-    if (!resolved) throw new Error(`节点“${node.name || node.id}”引用的 Workflows 不存在`);
-    const { workflow_id, ...nameBasedNode } = node;
-    return { ...nameBasedNode, workflow_name: resolved.name };
-  });
-  return { workflowNodes, nodes };
-}
-
-function workflowUploadPayload(imported, name, nodes) {
-  const { workflow_nodes, remote_tools, ...workflow } = imported;
+function workflowUploadPayload(imported, name) {
   return {
-    ...workflow,
+    ...imported,
     name,
     description: typeof imported.description === 'string' ? imported.description : '',
-    nodes,
   };
 }
 
@@ -540,35 +506,31 @@ function submitTextImport(event) {
   }
 }
 
-async function confirmWorkflowUpload(event) {
+async function confirmWorkflowUpload(event, overwrite = false) {
   event.preventDefault();
   if (!state.pendingUpload || state.saving || !validateUploadName()) return;
   const imported = state.pendingUpload;
   const uploadName = elements.uploadName.value.trim();
   const existing = state.workflows.find((workflow) => workflow.name === uploadName);
-  let created = null;
+  if (existing && !overwrite) {
+    elements.uploadError.textContent = 'Workflows 名称已存在，请选择覆盖';
+    return;
+  }
   state.saving = true;
   elements.uploadSubmit.disabled = true;
-  elements.state.textContent = '上传中';
+  elements.state.textContent = overwrite ? '覆盖中' : '上传中';
   updateControls();
   try {
-    const { workflowNodes, nodes } = resolveWorkflowReferences(imported);
-    created = await createWorkflow(uploadName);
-    await updateWorkflowMetadata(created.id, imported.input_ports || [], imported.output_ports || [], workflowNodes, imported.remote_tools || []);
-    const uploaded = workflowSummary(await uploadWorkflow(created.id, workflowUploadPayload(imported, uploadName, nodes)));
-    state.workflows.unshift(uploaded);
-    state.selectedId = uploaded.id;
+    const uploaded = workflowSummary(await uploadWorkflow(uploadName, workflowUploadPayload(imported, uploadName), overwrite));
+    const index = state.workflows.findIndex((workflow) => workflow.name === uploadName);
+    if (index >= 0) state.workflows[index] = uploaded;
+    else state.workflows.unshift(uploaded);
+    if (overwrite) state.workflowDetails.delete(uploadName);
+    state.selectedId = uploaded.name;
     state.pendingUpload = null;
     elements.uploadDialog.close();
-    elements.state.textContent = `已上传，共 ${state.workflows.length} 个`;
+    elements.state.textContent = `${overwrite ? '已覆盖' : '已上传'}，共 ${state.workflows.length} 个`;
   } catch (error) {
-    if (created) {
-      try {
-        await deleteWorkflow(created.id);
-      } catch (cleanupError) {
-        console.warn('上传失败后的 Workflows 清理失败', cleanupError);
-      }
-    }
     elements.state.textContent = error.name === 'AbortError' ? '上传超时' : (error.message || '上传失败');
   } finally {
     state.saving = false;
@@ -580,36 +542,8 @@ async function confirmWorkflowUpload(event) {
 }
 
 async function overwriteWorkflow() {
-  if (!state.pendingUpload || state.saving) return;
-  const imported = state.pendingUpload;
-  const uploadName = elements.uploadName.value.trim();
-  const existing = state.workflows.find((workflow) => workflow.name === uploadName);
-  if (!existing || !uploadName) return;
-  state.saving = true;
-  elements.uploadOverwrite.disabled = true;
-  elements.uploadSubmit.disabled = true;
-  elements.state.textContent = '覆盖中';
-  updateControls();
-  try {
-    const { workflowNodes, nodes } = resolveWorkflowReferences(imported);
-    await updateWorkflowMetadata(existing.id, imported.input_ports || [], imported.output_ports || [], workflowNodes, imported.remote_tools || []);
-    const uploaded = workflowSummary(await uploadWorkflow(existing.id, workflowUploadPayload(imported, uploadName, nodes)));
-    const index = state.workflows.findIndex((workflow) => workflow.id === existing.id);
-    state.workflows[index] = uploaded;
-    state.workflowDetails.delete(existing.id);
-    state.selectedId = uploaded.id;
-    state.pendingUpload = null;
-    elements.uploadDialog.close();
-    elements.state.textContent = `已覆盖，共 ${state.workflows.length} 个`;
-  } catch (error) {
-    elements.state.textContent = error.name === 'AbortError' ? '覆盖超时' : (error.message || '覆盖失败');
-  } finally {
-    state.saving = false;
-    validateUploadName();
-    updateControls();
-    renderList();
-    renderConfiguration();
-  }
+  if (!state.pendingUpload || state.saving || !validateUploadName()) return;
+  return confirmWorkflowUpload({ preventDefault() {} }, true);
 }
 
 async function submitRename(event) {
@@ -621,10 +555,10 @@ async function submitRename(event) {
   elements.renameError.textContent = '';
   updateControls();
   try {
-    const renamed = workflowSummary(await renameWorkflow(workflow.id, elements.renameName.value.trim()));
-    const index = state.workflows.findIndex((item) => item.id === workflow.id);
+    const renamed = workflowSummary(await renameWorkflow(workflow.name, elements.renameName.value.trim()));
+    const index = state.workflows.findIndex((item) => item.name === workflow.name);
     state.workflows[index] = renamed;
-    state.workflowDetails.delete(workflow.id);
+    state.workflowDetails.delete(workflow.name);
     elements.renameDialog.close();
     renderList();
     renderConfiguration();
@@ -675,7 +609,7 @@ async function copySelectedWorkflow() {
   elements.state.textContent = '复制中';
   updateControls();
   try {
-    const detail = await fetchWorkflow(workflow.id);
+    const detail = await fetchWorkflow(workflow.name);
     await writeClipboardText(JSON.stringify(exportableWorkflow(detail)));
     elements.state.textContent = '已复制到剪贴板';
   } catch (error) {
@@ -693,7 +627,7 @@ async function exportSelectedWorkflow() {
   elements.state.textContent = '导出中';
   updateControls();
   try {
-    const detail = await fetchWorkflow(workflow.id);
+    const detail = await fetchWorkflow(workflow.name);
     const exported = exportableWorkflow(detail);
     const blob = new Blob([`${JSON.stringify(exported, null, 2)}\n`], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -719,7 +653,7 @@ async function exportSelectedCanvas() {
   elements.state.textContent = '生成画布中';
   updateControls();
   try {
-    const detail = await workflowDetail(workflow.id);
+    const detail = await workflowDetail(workflow.name);
     const blob = new Blob([workflowCanvasSvg(detail)], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -742,11 +676,11 @@ async function removeSelectedWorkflow() {
   state.saving = true;
   updateControls();
   try {
-    await deleteWorkflow(workflow.id);
-    state.workflows = state.workflows.filter((item) => item.id !== workflow.id);
-    state.workflowDetails.delete(workflow.id);
-    localStorage.removeItem(`aagent.workflow.draft.v1.${workflow.id}`);
-    state.selectedId = state.workflows[0]?.id || null;
+      await deleteWorkflow(workflow.name);
+      state.workflows = state.workflows.filter((item) => item.name !== workflow.name);
+      state.workflowDetails.delete(workflow.name);
+      localStorage.removeItem(`aagent.workflow.draft.v1.${workflow.name}`);
+      state.selectedId = state.workflows[0]?.name || null;
     elements.state.textContent = `共 ${state.workflows.length} 个`;
     renderList();
     renderConfiguration();
