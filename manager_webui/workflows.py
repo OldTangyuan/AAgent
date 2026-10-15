@@ -1,5 +1,4 @@
 import json
-import os
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -13,7 +12,7 @@ from pymongo import DESCENDING
 from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
-from workflow_contract import filter_connections
+from workflow_node_remap import remap_workflow_node_names
 from workflow_validator import WorkflowValidationError, validate_workflow
 
 MAX_WORKFLOW_NODES = 200
@@ -23,189 +22,11 @@ MAX_WORKFLOW_NODE_REFERENCES = 50
 MAX_REMOTE_TOOL_REFERENCES = 100
 MAX_WORKFLOW_DESCRIPTION_LENGTH = 2000
 WORKFLOW_SCHEMA_VERSION = "1.1"
-DATA_TYPES = {"content", "message", "event", "map-content", "list-content", "list-message", "list-event"}
-
-NODE_BASE_FIELDS = {"id", "type", "name", "x", "y", "arguments"}
-NODE_SHARED_FIELDS = {"workflowPorts", "dataInputPorts", "input_ports", "output_ports"}
-NODE_ARGUMENT_FIELDS_BY_TYPE = {
-    "input": set(),
-    "output": set(),
-    "router": {"branches"},
-    "construct_message": {"role", "role_source"},
-    "construct_content": {"append_items"},
-    "construct_map_content": {"mappings"},
-    "map_content_get": set(),
-    "deserialize_json": {"outputs"},
-    "split_event": set(),
-    "construct_list": {"item_type", "initial_value_count"},
-    "list_append": {"item_type", "position"},
-    "foreach": {"item_type"},
-    "history": {"event_types", "limit"},
-    "llm": {"model", "think", "tool_calls", "tools"},
-    "local_tool": {"tool", "parameters"},
-    "remote_sync_tool": {"tool", "parameters", "outputs", "timeout_ms"},
-    "remote_async_tool": {"tool", "parameters", "timeout_ms", "callback"},
-    "context_create": {"value_type"},
-    "context_read": {"value_type"},
-    "context_write": {"value_type"},
-    "session_create": {"value_type"},
-    "session_read": {"value_type"},
-    "session_write": {"value_type"},
-    "workflow": {"workflow_name"},
-}
-NODE_ARGUMENT_FIELDS = set().union(*NODE_ARGUMENT_FIELDS_BY_TYPE.values())
 
 
 def node_arguments(node: dict[str, Any]) -> dict[str, Any]:
     arguments = node.get("arguments")
     return arguments if isinstance(arguments, dict) else {}
-
-
-def list_type_for_item(item_type: Any) -> str:
-    return f"list-{item_type}"
-
-
-def tool_node_error(node: dict[str, Any], max_wait_ms: int, max_async_timeout_ms: int) -> str | None:
-    arguments = node_arguments(node)
-    tool_name = arguments.get("tool")
-    parameters = arguments.get("parameters", [])
-    if not isinstance(tool_name, str) or not tool_name:
-        return "Tool 节点必须填写工具名称"
-    if node.get("type") == "local_tool":
-        if (
-            not isinstance(parameters, list)
-            or any(not isinstance(parameter, str) or not parameter or parameter == "control-in" for parameter in parameters)
-            or len(parameters) != len(set(parameters))
-        ):
-            return "Local Tool 参数必须是非空、不重复且不能为 control-in 的字符串"
-    else:
-        if not isinstance(parameters, list) or any(
-            not isinstance(parameter, dict)
-            or set(parameter) != {"name", "type"}
-            or not isinstance(parameter.get("name"), str)
-            or not parameter["name"]
-            or parameter["name"] == "control-in"
-            or parameter.get("type") not in DATA_TYPES
-            for parameter in parameters
-        ):
-            return "Remote Tool 参数必须包含有效的 name 和 type"
-        parameter_names = [parameter["name"] for parameter in parameters]
-        if len(parameter_names) != len(set(parameter_names)):
-            return "Remote Tool 参数名称不能重复"
-        if node.get("type") == "remote_sync_tool":
-            outputs = arguments.get("outputs", [])
-            if not isinstance(outputs, list) or any(
-                not isinstance(output, dict)
-                or set(output) != {"name", "type"}
-                or not isinstance(output.get("name"), str)
-                or not output["name"]
-                or output["name"] == "control-out"
-                or output.get("type") not in DATA_TYPES
-                for output in outputs
-            ):
-                return "Remote Sync Tool 输出必须包含有效的 name 和 type"
-            output_names = [output["name"] for output in outputs]
-            if len(output_names) != len(set(output_names)):
-                return "Remote Sync Tool 输出名称不能重复"
-        timeout_ms = arguments.get("timeout_ms")
-        maximum_ms = max_wait_ms if node.get("type") == "remote_sync_tool" else max_async_timeout_ms
-        if timeout_ms is not None and (
-            not isinstance(timeout_ms, int)
-            or isinstance(timeout_ms, bool)
-            or timeout_ms <= 0
-            or timeout_ms > maximum_ms
-        ):
-            return f"Remote Tool timeout_ms 必须是 1 到 {maximum_ms} 的整数"
-        if node.get("type") == "remote_async_tool":
-            callback = arguments.get("callback")
-            if callback is not None and (
-                not isinstance(callback, dict)
-                or set(callback) != {"type", "queue", "event_type", "on"}
-                or callback.get("type") != "redis"
-                or not isinstance(callback.get("queue"), str)
-                or not callback["queue"]
-                or len(callback["queue"]) > 256
-                or not isinstance(callback.get("event_type"), str)
-                or not callback["event_type"]
-                or len(callback["event_type"]) > 128
-                or not isinstance(callback.get("on"), list)
-                or not callback["on"]
-                or any(status not in {"working", "completed", "failed"} for status in callback["on"])
-                or len(callback["on"]) != len(set(callback["on"]))
-            ):
-                return "Remote Async Tool callback 必须是有效的 Redis 回调配置"
-    return None
-
-
-def node_format_error(node: dict[str, Any], index: int) -> str | None:
-    node_type = node.get("type")
-    arguments = node.get("arguments", {})
-    if node_type not in NODE_ARGUMENT_FIELDS_BY_TYPE:
-        return f"nodes[{index}].type 不受支持: {node_type}"
-    if not isinstance(arguments, dict):
-        return f"nodes[{index}].arguments 必须是对象"
-    misplaced_arguments = NODE_ARGUMENT_FIELDS.intersection(node)
-    if misplaced_arguments:
-        return f"nodes[{index}] 的可配置字段必须放入 arguments: {', '.join(sorted(misplaced_arguments))}"
-    misplaced_shared = NODE_SHARED_FIELDS.intersection(arguments)
-    if misplaced_shared:
-        return f"nodes[{index}] 的公共字段必须位于一级: {', '.join(sorted(misplaced_shared))}"
-    unsupported_arguments = set(arguments) - NODE_ARGUMENT_FIELDS_BY_TYPE.get(node_type, set())
-    if unsupported_arguments:
-        return f"nodes[{index}].arguments 包含该节点不支持的字段: {', '.join(sorted(unsupported_arguments))}"
-    unsupported_fields = set(node) - NODE_BASE_FIELDS - NODE_SHARED_FIELDS
-    if unsupported_fields:
-        return f"nodes[{index}] 包含不支持的一级字段: {', '.join(sorted(unsupported_fields))}"
-    if node_type == "history":
-        event_types = arguments.get("event_types")
-        limit = arguments.get("limit")
-        if (
-            not isinstance(event_types, list)
-            or not event_types
-            or any(event_type not in {"terminal", "response"} for event_type in event_types)
-            or len(event_types) != len(set(event_types))
-        ):
-            return f"nodes[{index}].arguments.event_types 只能包含不重复的 terminal 或 response"
-        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 1000:
-            return f"nodes[{index}].arguments.limit 必须是 1 到 1000 的整数"
-    if node_type == "list_append":
-        if arguments.get("item_type") not in {"content", "message", "event"}:
-            return f"nodes[{index}].arguments.item_type 必须是 content、message 或 event"
-        if arguments.get("position") not in {"start", "end"}:
-            return f"nodes[{index}].arguments.position 必须是 start 或 end"
-    if node_type == "deserialize_json":
-        outputs = arguments.get("outputs")
-        if not isinstance(outputs, list) or not outputs or any(
-            not isinstance(output, dict)
-            or set(output) != {"key", "type"}
-            or not isinstance(output.get("key"), str)
-            or not output["key"]
-            or output["key"] == "control-out"
-            or output.get("type") not in DATA_TYPES
-            for output in outputs
-        ):
-            return f"nodes[{index}].arguments.outputs 必须包含有效的 key 和 type"
-        output_keys = [output["key"] for output in outputs]
-        if len(output_keys) != len(set(output_keys)):
-            return f"nodes[{index}].arguments.outputs 的 key 不能重复"
-    if node_type == "construct_map_content":
-        mappings = arguments.get("mappings")
-        if not isinstance(mappings, list) or not mappings or any(
-            not isinstance(item, dict)
-            or set(item) != {"key", "value"}
-            or not isinstance(item.get("key"), str)
-            or not item["key"]
-            or not isinstance(item.get("value"), str)
-            for item in mappings
-        ):
-            return f"nodes[{index}].arguments.mappings 必须包含非空字符串 key 和字符串 value"
-        keys = [item["key"] for item in mappings]
-        if len(keys) != len(set(keys)):
-            return f"nodes[{index}].arguments.mappings 的 key 不能重复"
-    if node_type in {"context_create", "context_read", "context_write", "session_create", "session_read", "session_write"}:
-        if arguments.get("value_type") not in DATA_TYPES:
-            return f"nodes[{index}].arguments.value_type 必须是受支持的数据类型"
-    return None
 
 
 class WorkflowPortMetadata(BaseModel):
@@ -263,120 +84,6 @@ class RemoteToolReference(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     input_ports: list[WorkflowPortMetadata] = Field(default_factory=list, max_length=MAX_WORKFLOW_METADATA_PORTS)
     output_ports: list[WorkflowPortMetadata] = Field(default_factory=list, max_length=MAX_WORKFLOW_METADATA_PORTS)
-
-
-def duplicate_port_name(ports: list[WorkflowPortMetadata]) -> bool:
-    names = [port.name.strip().casefold() for port in ports]
-    return any(not name for name in names) or len(names) != len(set(names))
-
-
-def synchronize_metadata_ports(
-    nodes: list[dict[str, Any]],
-    connections: list[dict[str, Any]],
-    input_ports: list[dict[str, Any]],
-    output_ports: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    input_node_ports = [{**port, "id": f"workflow:{port['name']}"} for port in input_ports]
-    output_node_ports = [{**port, "id": f"workflow:{port['name']}"} for port in output_ports]
-    synchronized_nodes = [
-        {
-            **node,
-            **(
-                {"workflowPorts": input_node_ports}
-                if node.get("type") == "input"
-                else {"workflowPorts": output_node_ports}
-                if node.get("type") == "output"
-                else {}
-            ),
-        }
-        for node in nodes
-    ]
-    return synchronized_nodes, filter_connections(connections, synchronized_nodes, input_ports, output_ports)
-
-
-def filter_invalid_connections(
-    nodes: list[dict[str, Any]],
-    connections: list[dict[str, Any]],
-    input_ports: list[dict[str, Any]],
-    output_ports: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Drop links whose endpoints no longer exist after metadata changes."""
-    return nodes, filter_connections(connections, nodes, input_ports, output_ports)
-
-
-def synchronize_workflow_nodes(
-    nodes: list[dict[str, Any]],
-    connections: list[dict[str, Any]],
-    workflow_nodes: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    references = {reference["name"]: reference for reference in workflow_nodes}
-    removed_node_ids = {
-        node.get("id")
-        for node in nodes
-        if node.get("type") == "workflow" and node_arguments(node).get("workflow_name") not in references
-    }
-    synchronized_nodes = []
-    workflow_node_by_id = {}
-    for node in nodes:
-        if node.get("id") in removed_node_ids:
-            continue
-        if node.get("type") == "workflow":
-            arguments = node_arguments(node)
-            reference = references[arguments["workflow_name"]]
-            node = {
-                **node,
-                "arguments": {**arguments, "workflow_name": reference["name"]},
-                "input_ports": reference["input_ports"],
-                "output_ports": reference["output_ports"],
-            }
-            workflow_node_by_id[node["id"]] = node
-        synchronized_nodes.append(node)
-
-    def valid_workflow_endpoint(node: dict[str, Any], port_id: Any, connection_type: Any, field: str) -> bool:
-        return any(
-            port_id == f"workflow:{port['name']}" and connection_type == port["type"]
-            for port in node[field]
-        )
-
-    synchronized_connections = []
-    for connection in connections:
-        if connection.get("fromId") in removed_node_ids or connection.get("toId") in removed_node_ids:
-            continue
-        if connection.get("type") != "control":
-            source = workflow_node_by_id.get(connection.get("fromId"))
-            target = workflow_node_by_id.get(connection.get("toId"))
-            if source and not valid_workflow_endpoint(source, connection.get("fromPortId"), connection.get("type"), "output_ports"):
-                continue
-            if target and not valid_workflow_endpoint(target, connection.get("toPortId"), connection.get("type"), "input_ports"):
-                continue
-        synchronized_connections.append(connection)
-    return synchronized_nodes, synchronized_connections
-
-
-def remap_workflow_node_names(
-    nodes: list[dict[str, Any]],
-    references: list[WorkflowNodeReference],
-) -> list[dict[str, Any]]:
-    replacements = {
-        reference.previous_name: reference.name
-        for reference in references
-        if reference.previous_name and reference.previous_name != reference.name
-    }
-    remapped = []
-    for node in nodes:
-        if node.get("type") != "workflow":
-            remapped.append(node)
-            continue
-        arguments = node_arguments(node)
-        previous_name = arguments.get("workflow_name")
-        next_name = replacements.get(previous_name)
-        remapped.append(
-            {
-                **node,
-                "arguments": {**arguments, **({"workflow_name": next_name} if next_name else {})},
-            }
-        )
-    return remapped
 
 
 def synchronize_workflow_node_snapshots(
@@ -483,8 +190,6 @@ def create_workflows_router(
                 return JSONResponse(status_code=404, content={"error": "Workflow 不存在或已被删除"})
             if not overwrite and existing is not None:
                 return JSONResponse(status_code=409, content={"error": "Workflow 名称已存在"})
-            if duplicate_port_name(payload.input_ports) or duplicate_port_name(payload.output_ports):
-                return JSONResponse(status_code=400, content={"error": "Workflow 边界端口名称不能为空或重名"})
             input_ports = [port.model_dump() | {"name": port.name.strip()} for port in payload.input_ports]
             output_ports = [port.model_dump() | {"name": port.name.strip()} for port in payload.output_ports]
             references = payload.workflow_nodes
@@ -512,13 +217,6 @@ def create_workflows_router(
                 validate_workflow(values)
             except WorkflowValidationError as error:
                 return JSONResponse(status_code=400, content={"error": str(error)})
-            max_wait_ms = int(os.getenv("TOOL_CLIENT_MAX_WAIT_MS", "10000"))
-            max_async_timeout_ms = int(os.getenv("TOOL_CLIENT_MAX_ASYNC_TIMEOUT_MS", "3600000"))
-            for node in values["nodes"]:
-                if node.get("type") in {"local_tool", "remote_sync_tool", "remote_async_tool"}:
-                    error = tool_node_error(node, max_wait_ms, max_async_timeout_ms)
-                    if error:
-                        return JSONResponse(status_code=400, content={"error": error})
             local_tools = [node for node in values["nodes"] if node.get("type") == "local_tool"]
             if local_tools:
                 registered = {value.decode() if isinstance(value, bytes) else value for value in redis_client.hkeys(tools_key)}
@@ -582,16 +280,16 @@ def create_workflows_router(
                     }
                     for value in names
                 ]
-                nodes, connections = synchronize_workflow_nodes(
-                    remapped_nodes,
-                    existing.get("connections", []),
-                    canonical_references,
-                )
+                nodes = synchronize_workflow_node_snapshots(remapped_nodes, canonical_references)
                 updates.update({
                     "workflow_nodes": canonical_references,
                     "nodes": nodes,
-                    "connections": connections,
                 })
+            candidate = {**existing, **updates}
+            try:
+                validate_workflow(candidate)
+            except WorkflowValidationError as error:
+                return JSONResponse(status_code=400, content={"error": str(error)})
             workflows.update_one({"_id": existing["_id"]}, {"$set": updates})
             document = workflows.find_one({"_id": existing["_id"]})
         except PyMongoError:
