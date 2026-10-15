@@ -7,6 +7,7 @@ from workflows import (
     WorkflowMetadataPatchRequest,
     WorkflowNodeReference,
     WorkflowRequest,
+    workflow_port_values,
 )
 from workflow_node_remap import remap_workflow_node_names
 
@@ -62,6 +63,27 @@ class WorkflowNodeRemapTest(unittest.TestCase):
         remapped = remap_workflow_node_names(nodes, references)
 
         self.assertEqual(remapped[0]["arguments"]["workflow_name"], "  New child  ")
+
+    def test_metadata_patch_preserves_declared_dependency_ports(self):
+        payload = WorkflowMetadataPatchRequest.model_validate({
+            "name": "Parent",
+            "workflow_nodes": [{
+                "name": "Child",
+                "input_ports": [{"name": "prompt", "type": "content"}],
+                "output_ports": [{"name": "answer", "type": "content"}],
+            }],
+        })
+
+        reference = payload.workflow_nodes[0].model_dump(exclude_none=True)
+
+        self.assertEqual(
+            workflow_port_values(reference["input_ports"]),
+            [{"name": "prompt", "type": "content"}],
+        )
+        self.assertEqual(
+            workflow_port_values(reference["output_ports"]),
+            [{"name": "answer", "type": "content"}],
+        )
 
 if __name__ == "__main__":
     unittest.main()

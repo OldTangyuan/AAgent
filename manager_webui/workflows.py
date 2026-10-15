@@ -29,6 +29,10 @@ def node_arguments(node: dict[str, Any]) -> dict[str, Any]:
     return arguments if isinstance(arguments, dict) else {}
 
 
+def workflow_port_values(ports: list[Any]) -> list[dict[str, Any]]:
+    return [port.model_dump() if isinstance(port, BaseModel) else dict(port) for port in ports]
+
+
 class WorkflowPortMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -84,29 +88,6 @@ class RemoteToolReference(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     input_ports: list[WorkflowPortMetadata] = Field(default_factory=list, max_length=MAX_WORKFLOW_METADATA_PORTS)
     output_ports: list[WorkflowPortMetadata] = Field(default_factory=list, max_length=MAX_WORKFLOW_METADATA_PORTS)
-
-
-def synchronize_workflow_node_snapshots(
-    nodes: list[dict[str, Any]],
-    references: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    references_by_name = {reference["name"]: reference for reference in references}
-    synchronized = []
-    for node in nodes:
-        if node.get("type") != "workflow":
-            synchronized.append(node)
-            continue
-        arguments = node_arguments(node)
-        reference = references_by_name.get(arguments.get("workflow_name"))
-        if reference is None:
-            synchronized.append(node)
-            continue
-        synchronized.append({
-            **node,
-            "input_ports": reference["input_ports"],
-            "output_ports": reference["output_ports"],
-        })
-    return synchronized
 
 
 def workflow_response(document: dict[str, Any]) -> dict[str, Any]:
@@ -198,20 +179,12 @@ def create_workflows_router(
                 return JSONResponse(status_code=400, content={"error": "Workflow 依赖名称不能为空或重复"})
             if name in reference_names:
                 return JSONResponse(status_code=400, content={"error": "Workflow 不能引入自身"})
-            referenced = list(workflows.find({"name": {"$in": reference_names}})) if reference_names else []
-            by_name = {item.get("name"): item for item in referenced}
-            if len(by_name) != len(reference_names):
-                return JSONResponse(status_code=400, content={"error": "引入的 Workflow 不存在或已被删除"})
             canonical_references = []
             for reference in references:
-                actual = by_name[reference["name"]]
-                input_contract = [port.model_dump() for port in reference.get("input_ports", [])]
-                output_contract = [port.model_dump() for port in reference.get("output_ports", [])]
-                if input_contract != actual.get("input_ports", []) or output_contract != actual.get("output_ports", []):
-                    return JSONResponse(status_code=400, content={"error": f"Workflow 依赖 {actual['name']} 的端口契约不一致"})
-                canonical_references.append({"name": actual["name"], "input_ports": input_contract, "output_ports": output_contract})
+                input_contract = workflow_port_values(reference.get("input_ports", []))
+                output_contract = workflow_port_values(reference.get("output_ports", []))
+                canonical_references.append({"name": reference["name"], "input_ports": input_contract, "output_ports": output_contract})
             values = payload.model_dump()
-            values["nodes"] = synchronize_workflow_node_snapshots(values["nodes"], canonical_references)
             values.update({"name": name, "input_ports": input_ports, "output_ports": output_ports, "workflow_nodes": canonical_references})
             try:
                 validate_workflow(values)
@@ -267,23 +240,28 @@ def create_workflows_router(
             if payload.workflow_nodes is not None:
                 references = [reference.model_dump(exclude_none=True) for reference in payload.workflow_nodes]
                 names = [reference["name"] for reference in references]
-                targets = list(workflows.find({"name": {"$in": names}})) if names else []
-                by_name = {target["name"]: target for target in targets}
-                if len(names) != len(set(names)) or any(target not in by_name for target in names):
-                    return JSONResponse(status_code=400, content={"error": "Workflow 依赖名称重复或不存在"})
+                if len(names) != len(set(names)):
+                    return JSONResponse(status_code=400, content={"error": "Workflow 依赖名称重复"})
+                existing_references = {
+                    reference["name"]: reference
+                    for reference in existing.get("workflow_nodes", [])
+                    if isinstance(reference, dict) and isinstance(reference.get("name"), str)
+                }
                 remapped_nodes = remap_workflow_node_names(existing.get("nodes", []), references)
-                canonical_references = [
-                    {
-                        "name": value,
-                        "input_ports": by_name[value].get("input_ports", []),
-                        "output_ports": by_name[value].get("output_ports", []),
-                    }
-                    for value in names
-                ]
-                nodes = synchronize_workflow_node_snapshots(remapped_nodes, canonical_references)
+                canonical_references = []
+                for reference in references:
+                    previous_name = reference.get("previous_name", reference["name"])
+                    previous = existing_references.get(previous_name, {})
+                    canonical_references.append({
+                        "name": reference["name"],
+                        "input_ports": workflow_port_values(reference["input_ports"])
+                        if "input_ports" in reference else previous.get("input_ports", []),
+                        "output_ports": workflow_port_values(reference["output_ports"])
+                        if "output_ports" in reference else previous.get("output_ports", []),
+                    })
                 updates.update({
                     "workflow_nodes": canonical_references,
-                    "nodes": nodes,
+                    "nodes": remapped_nodes,
                 })
             candidate = {**existing, **updates}
             try:
