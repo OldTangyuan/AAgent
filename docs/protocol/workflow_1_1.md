@@ -63,18 +63,20 @@
 | 字段 | 类型 | 约束 |
 |---|---|---|
 | `schema_version` | 字符串 | 协议版本，必填，当前只能是 `"1.1"`；缺失或不匹配直接拒绝 |
-| `name` | 字符串 | Workflow 名称；顶层 Event 执行时按 `payload.workflow_id` 指定的 MongoDB `_id` 选中，不按名称路由 |
+| `name` | 字符串 | Workflow 名称；要求保留所有空格(空格敏感) ; 接受非null空白名称 |
 | `input_ports` / `output_ports` | 数组 | 每项至少含非空 `name` 和受支持的 `type`；名称在各自列表内不重复 |
 | `nodes` | 数组 | 恰好一个 `input`、至少一个 `output`；节点 `id` 不重复，`type` 必须受支持 |
 | `connections` | 数组 | `fromId`、`fromPortId`、`toId`、`toPortId` 指定端点，`type` 为 `control` 或对应数据类型 |
+| `workflow_nodes` | 数组，可选 | 本 Workflow 调用的子 Workflow 声明；每项包含 `name`、`input_ports`、`output_ports`，调用节点须与声明的接口匹配 |
 | `remote_tools` | 数组，可选 | 远程 Tool 的名称与输入/输出端口声明；远程 Tool 节点须匹配声明 |
 
 管理页还保存描述、引用和时间等元数据；MongoDB `_id` 是存储标识，不属于连线或节点字段。协议版本由顶层 `schema_version` 表达，不再有单独的整数版本字段。可执行性的依据是 `agent/workflow_validator.py` 中的 `validate_workflow`，管理页保存时另有大小、数量和引用限制。不能只检查 JSON 能否解析就认为 Workflow 有效。
 
 ## 2. 元数据
 
-`name` ， `schema_version`、`input_ports` ， `output_ports` 为workflow的元数据
-其中,`name`是workflow的唯一标识符,不可重名
+Workflow 定义的顶层元数据包括 `name`、`schema_version`、`input_ports`、`output_ports`、`workflow_nodes` 和 `remote_tools`。`name` 是 Workflow 名称；`input_ports` / `output_ports` 声明边界接口；`workflow_nodes` 声明本 Workflow 依赖并调用的子 Workflow 及其接口；`remote_tools` 声明本 Workflow 使用的远程 Tool 及其接口。后两者可省略，省略时按空数组处理。
+
+`workflow_nodes` 的每项包含 `name`、`input_ports`、`output_ports`；`name` 标识被调用的 Workflow，端口列表描述其可调用接口，Workflow 节点引用和端口必须与声明匹配。`remote_tools` 的每项恰含 `name`、`input_ports`、`output_ports`；远程 Tool 节点通过 `arguments.tool` 引用声明，输入参数以及同步 Tool 的输出声明必须与对应端口列表一致。`name` 是 Workflow 名称，平台要求不可重名（包含空格）。
 
 ## 3. 节点与连线
 
