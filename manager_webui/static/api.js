@@ -94,36 +94,20 @@ export function fetchEventCatalog() {
   return request('/api/event-catalog');
 }
 
-export function fetchWorkflow(workflowId) {
-  return request(`/api/workflows/${encodeURIComponent(workflowId)}`);
+export function fetchWorkflow(name) {
+  return request(`/api/workflow/${encodeURIComponent(name)}`);
 }
 
-export function createWorkflow(name) {
-  return request('/api/workflows', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  });
-}
-
-export function renameWorkflow(workflowId, name) {
-  return request(`/api/workflows/${encodeURIComponent(workflowId)}`, {
+export function renameWorkflow(currentName, name, workflowNodes = undefined) {
+  return request(`/api/workflow/${encodeURIComponent(currentName)}/metadata`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, ...(workflowNodes ? { workflow_nodes: workflowNodes } : {}) }),
   });
 }
 
-export function updateWorkflowMetadata(workflowId, inputPorts, outputPorts, workflowNodes = [], remoteTools = []) {
-  return request(`/api/workflows/${encodeURIComponent(workflowId)}/metadata`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ input_ports: inputPorts, output_ports: outputPorts, workflow_nodes: workflowNodes, remote_tools: remoteTools }),
-  });
-}
-
-export function deleteWorkflow(workflowId) {
-  return request(`/api/workflows/${encodeURIComponent(workflowId)}`, { method: 'DELETE' });
+export function deleteWorkflow(name) {
+  return request(`/api/workflow/${encodeURIComponent(name)}`, { method: 'DELETE' });
 }
 
 export function createModel(model) {
@@ -146,9 +130,9 @@ export function deleteModel(modelId) {
   return request(`/api/models/${encodeURIComponent(modelId)}`, { method: 'DELETE' });
 }
 
-export function uploadWorkflow(workflowId, workflow) {
-  return request(`/api/workflows/${encodeURIComponent(workflowId)}`, {
-    method: 'PUT',
+export function uploadWorkflow(name, workflow, overwrite = false) {
+  return request(`/api/workflow/${encodeURIComponent(name)}`, {
+    method: overwrite ? 'PUT' : 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(workflow),
   });
