@@ -5,12 +5,12 @@ from typing import Any
 
 def remap_workflow_node_names(
     nodes: list[dict[str, Any]],
-    references: list[Any],
+    references: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     replacements = {
-        reference.previous_name: reference.name
+        reference["previous_name"]: reference["name"]
         for reference in references
-        if reference.previous_name and reference.previous_name != reference.name
+        if reference.get("previous_name") and reference["previous_name"] != reference["name"]
     }
     remapped = []
     for node in nodes:

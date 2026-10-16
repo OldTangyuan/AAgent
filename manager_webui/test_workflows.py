@@ -58,7 +58,7 @@ class WorkflowNodeRemapTest(unittest.TestCase):
         nodes = [
             {"id": "call-child", "type": "workflow", "arguments": {"workflow_name": "Old child"}},
         ]
-        references = [WorkflowNodeReference(name="  New child  ", previous_name="Old child")]
+        references = [{"name": "  New child  ", "previous_name": "Old child"}]
 
         remapped = remap_workflow_node_names(nodes, references)
 
