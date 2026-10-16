@@ -181,3 +181,9 @@ Workflow 版本采用独立的 `MAJOR.MINOR`；顶层 `schema_version` 是 1.1 �
 消费边界的版本检查已落地：Agent 的 `parse_workflow` 与 `validate_workflow` 在入口比对 `schema_version`，管理页保存时校验，编辑器载入/导入时校验；缺失或不匹配一律拒绝，不做兼容与数据迁移。
 
 修改节点/端口契约时，需同批核对编辑器、管理页和 Agent 的解析与校验，并同步提升这里写死的常量；版本清单、文档元信息和标签正文在发布时对齐
+
+## 5. JSON Schema
+
+Draft 2020-12 Schema 描述 Workflow 1.1 的持久化 JSON 外形，可用于编辑器、API 客户端和工具的基础结构校验，详见 [workflow_1_1.schema.json](workflow_1_1.schema.json)。节点 `arguments` 保持为对象，由 `type` 决定具体字段；节点参数、动态端口、边界节点数量、端点存在性及连线类型匹配等语义规则仍以 `agent/workflow_validator.py` 为准，JSON Schema 校验通过不代表 Workflow 可执行。
+
+顶层允许管理页附加描述、引用、时间及存储元数据；这些元数据不改变 Workflow 定义本身。Schema 中 `workflowPorts` 用于边界节点的持久化端口快照，`input_ports` / `output_ports` 在不同节点类型上的语义仍由节点契约解释。

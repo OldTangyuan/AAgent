@@ -20,6 +20,7 @@ from workflow_validator import WorkflowValidationError, validate_workflow
 def callable_workflow_fixture() -> dict:
     return {
         "schema_version": WORKFLOW_SCHEMA_VERSION,
+        "name": "callable_fixture",
         "input_ports": [{"name": "query", "type": "content"}],
         "output_ports": [{"name": "result", "type": "content"}],
         "nodes": [
@@ -124,6 +125,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
     def test_validator_reads_construct_list_item_type_from_arguments(self):
         workflow = {
             "schema_version": WORKFLOW_SCHEMA_VERSION,
+            "name": "list_fixture",
             "input_ports": [{"name": "value", "type": "content"}],
             "output_ports": [{"name": "values", "type": "list-content"}],
             "nodes": [
@@ -196,6 +198,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
     def test_llm_accepts_list_message_input(self):
         workflow = {
             "schema_version": WORKFLOW_SCHEMA_VERSION,
+            "name": "llm_fixture",
             "input_ports": [{"name": "messages", "type": "list-message"}],
             "output_ports": [],
             "nodes": [
@@ -267,6 +270,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
     def test_validator_and_parser_accept_history_node(self):
         workflow = {
             "schema_version": WORKFLOW_SCHEMA_VERSION,
+            "name": "history_fixture",
             "input_ports": [],
             "output_ports": [{"name": "events", "type": "list-event"}],
             "nodes": [
@@ -303,6 +307,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
     def test_validator_and_parser_accept_map_content_nodes(self):
         workflow = {
             "schema_version": WORKFLOW_SCHEMA_VERSION,
+            "name": "map_content_fixture",
             "input_ports": [{"name": "key", "type": "content"}],
             "output_ports": [{"name": "result", "type": "content"}],
             "nodes": [
@@ -346,6 +351,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
     def test_validator_accepts_history_event_list_to_foreach(self):
         workflow = {
             "schema_version": WORKFLOW_SCHEMA_VERSION,
+            "name": "foreach_fixture",
             "input_ports": [],
             "output_ports": [],
             "nodes": [
@@ -376,6 +382,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
     def test_validator_and_parser_accept_split_event_node(self):
         workflow = {
             "schema_version": WORKFLOW_SCHEMA_VERSION,
+            "name": "split_event_fixture",
             "input_ports": [{"name": "event", "type": "event"}],
             "output_ports": [
                 {"name": "type", "type": "content"},
@@ -460,6 +467,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
     def test_parser_uses_named_control_flow_dictionaries(self):
         workflow = {
             "schema_version": WORKFLOW_SCHEMA_VERSION,
+            "name": "router_fixture",
             "input_ports": [],
             "output_ports": [],
             "nodes": [
@@ -530,7 +538,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
         workflow = callable_workflow_fixture()
         workflow["nodes"][1]["workflow_name"] = "Summary"
 
-        with self.assertRaisesRegex(WorkflowValidationError, "must be inside arguments"):
+        with self.assertRaisesRegex(WorkflowValidationError, "Additional properties are not allowed"):
             validate_workflow(workflow)
 
     def test_validator_rejects_removed_tool_call_node(self):
@@ -542,7 +550,7 @@ class CallableWorkflowNodeTest(unittest.TestCase):
             "arguments": {},
         }
 
-        with self.assertRaisesRegex(WorkflowValidationError, "unsupported node type: tool_call"):
+        with self.assertRaisesRegex(WorkflowValidationError, "nodes.1.type"):
             validate_workflow(workflow)
 
     def test_validator_rejects_shared_fields_inside_arguments(self):
@@ -629,21 +637,21 @@ class CallableWorkflowNodeTest(unittest.TestCase):
         workflow = callable_workflow_fixture()
         del workflow["nodes"][0]["workflowPorts"]
 
-        with self.assertRaisesRegex(WorkflowValidationError, "workflowPorts is required"):
+        with self.assertRaisesRegex(WorkflowValidationError, "workflowPorts"):
             validate_workflow(workflow)
 
     def test_validator_rejects_boundary_ports_that_differ_from_metadata(self):
         workflow = callable_workflow_fixture()
         workflow["nodes"][0]["workflowPorts"] = []
 
-        with self.assertRaisesRegex(WorkflowValidationError, "must match workflow input_ports"):
+        with self.assertRaisesRegex(WorkflowValidationError, "workflowPorts"):
             validate_workflow(workflow)
 
     def test_validator_requires_boundary_metadata(self):
         workflow = callable_workflow_fixture()
         del workflow["input_ports"]
 
-        with self.assertRaisesRegex(WorkflowValidationError, "workflow.input_ports must be a list"):
+        with self.assertRaisesRegex(WorkflowValidationError, "input_ports.*required property"):
             validate_workflow(workflow)
 
     def test_validator_rejects_multiple_input_nodes(self):

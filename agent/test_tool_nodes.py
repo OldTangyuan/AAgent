@@ -44,6 +44,7 @@ def tool_workflow_map(node_type: str, **arguments) -> list[dict]:
 def valid_workflow(node: dict) -> dict:
     workflow = {
         "schema_version": WORKFLOW_SCHEMA_VERSION,
+        "name": "tool_fixture",
         "input_ports": [],
         "output_ports": [],
         "nodes": [
@@ -235,7 +236,7 @@ class ToolNodeValidationTest(unittest.TestCase):
             "arguments": {"tool": "echo", "parameters": []},
         })
 
-        with self.assertRaisesRegex(WorkflowValidationError, "unsupported node type: tool"):
+        with self.assertRaisesRegex(WorkflowValidationError, "nodes.1.type"):
             validate_workflow(workflow)
 
     def test_runtime_and_argument_contract_support_the_same_node_types(self):
@@ -341,7 +342,7 @@ class ToolNodeValidationTest(unittest.TestCase):
             "arguments": {"tool": "echo", "parameters": [], "timeout_ms": 1000},
         })
 
-        with self.assertRaisesRegex(WorkflowValidationError, "unsupported node type: remote_tool"):
+        with self.assertRaisesRegex(WorkflowValidationError, "nodes.1.type"):
             validate_workflow(workflow)
 
     def test_async_timeout_is_not_limited_by_wait_maximum(self):
