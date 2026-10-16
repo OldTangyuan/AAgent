@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import os
+import json
+from pathlib import Path
 from typing import Any
+
+from jsonschema import Draft202012Validator
 
 from workflow_contract import (
     DATA_CONNECTION_TYPES,
@@ -26,11 +30,18 @@ class WorkflowValidationError(ValueError):
     """Raised when a workflow violates its node or connection contract."""
 
 
+_WORKFLOW_SCHEMA = json.loads(
+    Path(__file__).with_name("workflow_1_1.schema.json").read_text(encoding="utf-8")
+)
+_WORKFLOW_SCHEMA_VALIDATOR = Draft202012Validator(_WORKFLOW_SCHEMA)
+
+
 def validate_workflow(workflow: dict[str, Any]) -> None:
     if workflow.get("schema_version") != WORKFLOW_SCHEMA_VERSION:
         raise WorkflowValidationError(
             f"workflow.schema_version must be {WORKFLOW_SCHEMA_VERSION}"
         )
+    _validate_workflow_schema(workflow)
     nodes = workflow.get("nodes")
     connections = workflow.get("connections")
     if not isinstance(nodes, list):
@@ -154,6 +165,16 @@ def validate_workflow(workflow: dict[str, Any]) -> None:
             raise WorkflowValidationError(
                 f"control ports must be connected: node {node_id}, ports {', '.join(missing)}"
             )
+
+def _validate_workflow_schema(workflow: dict[str, Any]) -> None:
+    schema_errors = sorted(
+        _WORKFLOW_SCHEMA_VALIDATOR.iter_errors(workflow),
+        key=lambda error: list(map(str, error.absolute_path)),
+    )
+    if schema_errors:
+        error = schema_errors[0]
+        path = ".".join(map(str, error.absolute_path)) or "workflow"
+        raise WorkflowValidationError(f"{path}: {error.message}")
 
 
 def _validate_node(node: Any, index: int) -> None:
@@ -391,6 +412,7 @@ def _validate_node(node: Any, index: int) -> None:
                 or len(callback["event_type"]) > 128
                 or not isinstance(callback.get("on"), list)
                 or not callback["on"]
+                or not all(isinstance(status, str) for status in callback["on"])
                 or any(status not in {"working", "completed", "failed"} for status in callback["on"])
                 or len(callback["on"]) != len(set(callback["on"]))
             ):
