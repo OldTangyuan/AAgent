@@ -126,7 +126,7 @@ async def request_body_guard(request: Request, call_next):
         request.url.path == "/api/models" or request.url.path.startswith("/api/models/")
     ):
         body_limit = (MAX_MODEL_BODY_BYTES, "模型配置请求体不能超过 16 KB")
-    if request.method == "PUT" and request.url.path.startswith("/api/workflow/"):
+    if request.method in {"POST", "PUT"} and request.url.path.startswith("/api/workflow/"):
         body_limit = (MAX_WORKFLOW_BODY_BYTES, "Workflow 请求体不能超过 512 KB")
     if request.method in {"POST", "PUT"} and request.url.path.startswith("/api/sessions"):
         body_limit = (MAX_SESSION_BODY_BYTES, "Session 请求体不能超过 1 MB")
