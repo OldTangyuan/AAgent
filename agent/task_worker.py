@@ -18,7 +18,7 @@ from queue_client import (
 )
 
 
-def read_bound_workflow_id(event_type: str) -> str | None:
+def read_bound_workflow_name(event_type: str) -> str | None:
     mongo_kwargs = {
         "host": os.getenv("MONGO_HOST", "mongodb"),
         "port": int(os.getenv("MONGO_PORT", "27017")),
@@ -34,33 +34,33 @@ def read_bound_workflow_id(event_type: str) -> str | None:
         with MongoClient(**mongo_kwargs) as client:
             database = client[os.getenv("MONGO_DATABASE", "agent")]
             binding = database[os.getenv("MONGO_EVENT_BINDING_COLLECTION", "event_bindings")].find_one(
-                {"event_type": event_type, "enabled": True}, {"workflow_id": 1}
+                {"event_type": event_type, "enabled": True}, {"workflow_name": 1}
             )
     except PyMongoError as error:
         raise RuntimeError("failed to read event binding") from error
-    return str(binding["workflow_id"]) if binding is not None else None
+    return binding["workflow_name"] if binding is not None else None
 
 def handle_task(e: dict):
     record_history(e)
     event_type = e["event_type"]
     if event_type != "workflow":
-        workflow_id = read_bound_workflow_id(event_type)
-        if workflow_id is not None:
+        workflow_name = read_bound_workflow_name(event_type)
+        if workflow_name is not None:
             publish_to_queue(MAIN_AGENT_QUEUE_NAME, {
                 "event_type": "workflow",
-                "payload": {**e["payload"], "workflow_id": workflow_id},
+                "payload": {**e["payload"], "workflow_name": workflow_name},
             })
         return
 
-    workflow_id = e["payload"]["workflow_id"]
+    workflow_name = e["payload"]["workflow_name"]
     try:
-        workflow_document = _read_workflow(workflow_id, by_id=True)
+        workflow_document = _read_workflow(workflow_name)
     except WorkflowParseError as error:
         if not str(error).startswith("workflow not found:"):
             raise
         publish_to_queue(MAIN_AGENT_QUEUE_NAME, {
             "event_type": "error",
-            "payload": {"workflow_id": workflow_id, "message": "workflow not found"},
+            "payload": {"workflow_name": workflow_name, "message": "workflow not found"},
         })
         return
     validate_workflow(workflow_document)
@@ -114,9 +114,9 @@ def main():
             except Exception as error:
                 if task.get("event_type") != "error":
                     payload = {"message": str(error)}
-                    workflow_id = task.get("payload", {}).get("workflow_id")
-                    if workflow_id is not None:
-                        payload["workflow_id"] = workflow_id
+                    workflow_name = task.get("payload", {}).get("workflow_name")
+                    if workflow_name is not None:
+                        payload["workflow_name"] = workflow_name
                     publish_to_queue(MAIN_AGENT_QUEUE_NAME, {
                         "event_type": "error",
                         "payload": payload,

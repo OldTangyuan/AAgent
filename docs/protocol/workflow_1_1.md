@@ -6,7 +6,7 @@
 > 适用版本:平台 `4.0.6+`。
 > 协议版本:workflow 1.1。
 
-本文定义 Workflow 定义的持久化 JSON 契约。版本以仓库根 `version.json.protocol.workflow` 为准。Workflow 不是[Event 1.0](event_1_0.md) 信封；它由编辑器/管理页保存到 MongoDB `workflows`，由 Agent 读取、校验和执行。
+本文定义 Workflow 定义的持久化 JSON 契约。版本以仓库根 `version.json.protocol.workflow` 为准。Workflow 不是[Event 1.1](event_1_1.md) 信封；它由编辑器/管理页保存到 MongoDB `workflows`，由 Agent 读取、校验和执行。
 
 ## 1. 顶层结构
 
@@ -128,13 +128,13 @@ Workflow 是**端口与连线强类型**的：数据连接的 `type` 必须是�
 
 `control` 不传递 Python 数据值；编译后控制边仅以节点的整数索引表示。JSON 对象和数组进入 Python 后分别成为 `dict` 和 `list`。以上是端口预期的值形状，不表示所有入口都已做运行时类型检查。
 
-顶层 Workflow 由 Agent 处理 `event_type: "workflow"` 的 Event 时，先按 `payload.workflow_id` 读取并校验定义，再按 Input 端口名称从 Event `payload` 取同名字段。例如上面的 `answer_question` 可接收：
+顶层 Workflow 由 Agent 处理 `event_type: "workflow"` 的 Event 时，先按 `payload.workflow_name` 读取并校验定义，再按 Input 端口名称从 Event `payload` 取同名字段。例如上面的 `answer_question` 可接收：
 
 ```json
-{"event_type":"workflow","payload":{"workflow_id":"<MongoDB 中的 Workflow _id>","question":"什么是强类型端口？"}}
+{"event_type":"workflow","payload":{"workflow_name":"answer_question","question":"什么是强类型端口？"}}
 ```
 
-此时 `question` 的 JSON 字符串成为 Python `str`，写入 Input 节点对应连接目标的 `data_inputs["question"][2]`；未提供的端口值取 `None`。`workflow_id` 用于选择定义，不会自动传入 Workflow；仅在显式声明同名 Input 端口时才按普通字段传入。子 Workflow 则从父节点同名端口传值，不经 Event 队列。
+此时 `question` 的 JSON 字符串成为 Python `str`，写入 Input 节点对应连接目标的 `data_inputs["question"][2]`；未提供的端口值取 `None`。`workflow_name` 用于选择定义，不会自动传入 Workflow；仅在显式声明同名 Input 端口时才按普通字段传入。子 Workflow 则从父节点同名端口传值，不经 Event 队列。
 
 `validate_workflow` 校验的是**定义**（端口声明、连接类型、节点参数等），不是 Event `payload` 的实际值。入口的 `payload.get(...)` 和数据传播不统一验证 `str` / `dict` / `list` 的形状；部分节点在消费时自行检查（如 `llm` 的 `list-message`、`split_event` 的 `event`、`deserialize_json` 的声明输出），Context/Session 存取也校验对应 `value_type`。因此外部调用方应按上表提供值，不能把“定义通过校验”理解为“外部输入已通过类型校验”。
 

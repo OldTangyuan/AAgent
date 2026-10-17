@@ -14,7 +14,7 @@ const formState = document.querySelector('#formState');
 const formStatus = document.querySelector('#formStatus');
 const emptyState = document.querySelector('#bindingEmpty');
 const eventType = document.querySelector('#eventType');
-const workflowId = document.querySelector('#workflowId');
+const workflowName = document.querySelector('#workflowName');
 const contractWorkflowName = document.querySelector('#contractWorkflowName');
 const contractInputPorts = document.querySelector('#contractInputPorts');
 const contractOutputPorts = document.querySelector('#contractOutputPorts');
@@ -56,7 +56,7 @@ function renderContractPorts(container, ports, emptyMessage) {
 }
 
 function renderContractPreview() {
-  const workflow = workflows.find((item) => item.id === workflowId.value);
+  const workflow = workflows.find((item) => item.name === workflowName.value);
   const inputPorts = workflow?.input_ports || [];
   const outputPorts = workflow?.output_ports || [];
   contractWorkflowName.textContent = workflow ? (workflow.name || workflow.id) : '未选择 Workflow';
@@ -132,18 +132,18 @@ function renderList() {
 
 function renderWorkflows(items) {
   workflows = items;
-  workflowId.replaceChildren();
+  workflowName.replaceChildren();
   const placeholder = document.createElement('option');
   placeholder.value = '';
   placeholder.textContent = items.length ? '选择 Workflow' : '暂无 Workflow，请先创建';
-  workflowId.append(placeholder);
+  workflowName.append(placeholder);
   for (const workflow of items) {
     const option = document.createElement('option');
-    option.value = workflow.id;
+    option.value = workflow.name;
     option.textContent = workflow.name || workflow.id;
-    workflowId.append(option);
+    workflowName.append(option);
   }
-  workflowId.disabled = items.length === 0;
+  workflowName.disabled = items.length === 0;
   saveButton.disabled = items.length === 0;
   renderContractPreview();
 }
@@ -153,7 +153,7 @@ function editBinding(binding) {
   form.classList.add('open');
   emptyState.hidden = true;
   eventType.value = binding.event_type;
-  workflowId.value = binding.workflow_id || '';
+  workflowName.value = binding.workflow_name || '';
   renderContractPreview();
   enabled.checked = binding.enabled;
   formTitle.textContent = '编辑事件绑定';
@@ -201,13 +201,13 @@ newButton.addEventListener('click', () => {
   eventType.focus();
 });
 cancelButton.addEventListener('click', resetForm);
-workflowId.addEventListener('change', renderContractPreview);
+workflowName.addEventListener('change', renderContractPreview);
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   const payload = {
     event_type: eventType.value.trim().toLowerCase(),
-    workflow_id: workflowId.value,
+    workflow_name: workflowName.value,
     enabled: enabled.checked,
   };
   saveButton.disabled = true;

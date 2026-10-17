@@ -64,7 +64,7 @@ EVENT_CATALOG = [
         "event_type": "workflow",
         "scope": "main_queue",
         "title": "Workflow 执行",
-        "description": "按 payload.workflow_id 执行 Workflow，并按输入端口名称传播 payload。",
+        "description": "按 payload.workflow_name 执行 Workflow，并按输入端口名称传播 payload。",
         "producer": "agent/task_worker.py",
         "consumer": "agent/task_worker.py",
         "schema": {
@@ -75,9 +75,9 @@ EVENT_CATALOG = [
                 "event_type": {"const": "workflow"},
                 "payload": {
                     "type": "object",
-                    "required": ["workflow_id"],
+                    "required": ["workflow_name"],
                     "properties": {
-                        "workflow_id": {"type": "string"},
+                        "workflow_name": {"type": "string"},
                         "content": {},
                         "source": {"type": "string"},
                     },

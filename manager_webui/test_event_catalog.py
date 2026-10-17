@@ -18,7 +18,7 @@ class EventCatalogTest(unittest.TestCase):
             {"qq", "terminal", "workflow", "error", "response"},
         )
 
-        self.assertEqual(items["workflow"]["schema"]["properties"]["payload"]["required"], ["workflow_id"])
+        self.assertEqual(items["workflow"]["schema"]["properties"]["payload"]["required"], ["workflow_name"])
         self.assertEqual(
             items["error"]["schema"]["properties"]["payload"]["required"], ["message"]
         )

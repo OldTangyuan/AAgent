@@ -2,7 +2,6 @@ import re
 from typing import Any
 
 from bson import ObjectId
-from bson.errors import InvalidId
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -18,7 +17,7 @@ class EventBindingRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     event_type: str = Field(min_length=1, max_length=MAX_EVENT_TYPE_LENGTH)
-    workflow_id: str = Field(min_length=1)
+    workflow_name: str = Field(min_length=1)
     enabled: bool = True
 
 
@@ -26,7 +25,6 @@ def _binding_response(document: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": str(document["_id"]),
         "event_type": document.get("event_type", ""),
-        "workflow_id": str(document["workflow_id"]) if isinstance(document.get("workflow_id"), ObjectId) else None,
         "workflow_name": document.get("workflow_name", ""),
         "enabled": document.get("enabled", True),
         "created_at": document.get("created_at"),
@@ -59,16 +57,11 @@ def create_event_bindings_router(bindings: Collection, workflows: Collection) ->
         event_type = payload.event_type.strip().lower()
         if not EVENT_TYPE_PATTERN.fullmatch(event_type):
             return None, JSONResponse(status_code=400, content={"error": "Event 类型只能包含小写字母、数字、点、下划线和短横线"})
-        try:
-            workflow_id = ObjectId(payload.workflow_id)
-        except (InvalidId, TypeError):
-            return None, JSONResponse(status_code=400, content={"error": "Workflow id 无效"})
-        workflow = workflows.find_one({"_id": workflow_id}, {"name": 1})
+        workflow = workflows.find_one({"name": payload.workflow_name}, {"name": 1})
         if workflow is None:
             return None, JSONResponse(status_code=404, content={"error": "Workflow 不存在或已被删除"})
         return {
             "event_type": event_type,
-            "workflow_id": workflow_id,
             "workflow_name": workflow.get("name", ""),
             "enabled": payload.enabled,
         }, None
