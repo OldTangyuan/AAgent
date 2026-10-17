@@ -13,7 +13,6 @@ from pymongo.errors import PyMongoError
 from workflow_contract import (
     boundary_ports,
     data_ports_for_node,
-    filter_connections,
     node_argument,
     normalize_node_arguments,
 )
@@ -39,12 +38,7 @@ def parse_workflow(workflow: dict[str, Any]) -> list[dict[str, Any]]:
             f"expected {WORKFLOW_SCHEMA_VERSION}"
         )
     nodes = workflow["nodes"]
-    connections = filter_connections(
-        workflow["connections"],
-        nodes,
-        workflow["input_ports"],
-        workflow["output_ports"],
-    )
+    connections = workflow["connections"]
     input_ports = workflow["input_ports"]
     output_ports = workflow["output_ports"]
     node_indexes = {node["id"]: index for index, node in enumerate(nodes)}

@@ -17,10 +17,8 @@ from workflow_contract import (
     NODE_SHARED_FIELDS,
     SUPPORTED_NODE_TYPES,
     boundary_ports,
+    connection_validation_error,
     control_ports_for_node,
-    data_ports_for_node,
-    filter_connections,
-    list_type_for_item,
     node_argument,
 )
 from workflow_parser import WORKFLOW_SCHEMA_VERSION
@@ -101,8 +99,7 @@ def validate_workflow(workflow: dict[str, Any]) -> None:
     }
     connected_data_inputs: set[tuple[str, str]] = set()
 
-    valid_connections = filter_connections(connections, nodes, input_ports, output_ports)
-    for index, connection in enumerate(valid_connections):
+    for index, connection in enumerate(connections):
         if not isinstance(connection, dict):
             raise WorkflowValidationError(f"connections[{index}] must be an object")
         from_id = connection.get("fromId")
@@ -628,110 +625,17 @@ def _validate_data_connection(
     input_ports: list[dict[str, Any]],
     output_ports: list[dict[str, Any]],
 ) -> None:
-    source_inputs, source_outputs = data_ports_for_node(
-        source_node, input_ports, output_ports
+    error = connection_validation_error(
+        {
+            "fromId": source_node["id"],
+            "toId": target_node["id"],
+            "fromPortId": from_port,
+            "toPortId": to_port,
+            "type": connection_type,
+        },
+        {source_node["id"]: source_node, target_node["id"]: target_node},
+        input_ports,
+        output_ports,
     )
-    target_inputs, target_outputs = data_ports_for_node(
-        target_node, input_ports, output_ports
-    )
-    del source_inputs, target_outputs
-    if from_port not in source_outputs:
-        raise WorkflowValidationError(
-            f"unknown data output: node {source_node['id']}, port {from_port}"
-        )
-    if to_port not in target_inputs:
-        raise WorkflowValidationError(
-            f"unknown data input: node {target_node['id']}, port {to_port}"
-        )
-
-    if source_node["type"] == "input":
-        source_port = next(port for port in boundary_ports(input_ports) if port["id"] == from_port)
-        if connection_type != source_port["type"]:
-            raise WorkflowValidationError(
-                f"workflow input port {from_port} requires {source_port['type']} data: connection {connection_index}"
-            )
-    if target_node["type"] == "output":
-        target_port = next(port for port in boundary_ports(output_ports) if port["id"] == to_port)
-        if connection_type != target_port["type"]:
-            raise WorkflowValidationError(
-                f"workflow output port {to_port} requires {target_port['type']} data: connection {connection_index}"
-            )
-    if source_node["type"] == "workflow":
-        source_port = next(port for port in source_node["output_ports"] if f"workflow:{port['name']}" == from_port)
-        if connection_type != source_port["type"]:
-            raise WorkflowValidationError(
-                f"callable workflow output {from_port} requires {source_port['type']} data: connection {connection_index}"
-            )
-    if target_node["type"] == "workflow":
-        target_port = next(port for port in target_node["input_ports"] if f"workflow:{port['name']}" == to_port)
-        if connection_type != target_port["type"]:
-            raise WorkflowValidationError(
-                f"callable workflow input {to_port} requires {target_port['type']} data: connection {connection_index}"
-            )
-
-    source_type = source_node["type"]
-    target_type = target_node["type"]
-    if target_type == "map_content_get":
-        expected_type = "map-content" if to_port == "map-in" else "content"
-        if to_port not in {"map-in", "key-in"} or connection_type != expected_type:
-            raise WorkflowValidationError(
-                f"map_content_get {to_port} requires {expected_type} data: connection {connection_index}"
-            )
-    if source_type == "construct_map_content" and (from_port != "map-out" or connection_type != "map-content"):
-        raise WorkflowValidationError(
-            f"construct_map_content map-out requires map-content data: connection {connection_index}"
-        )
-    if source_type == "map_content_get" and (from_port != "content-out" or connection_type != "content"):
-        raise WorkflowValidationError(
-            f"map_content_get content-out requires content data: connection {connection_index}"
-        )
-    if target_type == "construct_message" and connection_type != "content":
-        raise WorkflowValidationError(
-            f"construct_message {to_port} requires content data: connection {connection_index}"
-        )
-    if source_type == "construct_message" and connection_type != "message":
-        raise WorkflowValidationError(
-            f"construct_message message-out requires message data: connection {connection_index}"
-        )
-    if target_type == "construct_list" and connection_type != node_argument(target_node, "item_type"):
-        raise WorkflowValidationError(
-            f"construct_list input requires {node_argument(target_node, 'item_type')} data: connection {connection_index}"
-        )
-    if source_type == "construct_list" and connection_type != list_type_for_item(node_argument(source_node, "item_type")):
-        raise WorkflowValidationError(
-            f"construct_list output requires {list_type_for_item(node_argument(source_node, 'item_type'))} data: connection {connection_index}"
-        )
-    if target_type == "list_append":
-        expected_type = (
-            list_type_for_item(node_argument(target_node, "item_type"))
-            if to_port == "list-in"
-            else node_argument(target_node, "item_type")
-        )
-        if connection_type != expected_type:
-            raise WorkflowValidationError(
-                f"list_append {to_port} requires {expected_type} data: connection {connection_index}"
-            )
-    if source_type == "list_append" and connection_type != list_type_for_item(node_argument(source_node, "item_type")):
-        raise WorkflowValidationError(
-            f"list_append output requires {list_type_for_item(node_argument(source_node, 'item_type'))} data: connection {connection_index}"
-        )
-    if target_type == "foreach" and (
-        connection_type != list_type_for_item(node_argument(target_node, "item_type")) or to_port != "list-in"
-    ):
-        raise WorkflowValidationError(
-            f"foreach input requires {list_type_for_item(node_argument(target_node, 'item_type'))} data: connection {connection_index}"
-        )
-    if source_type == "foreach" and (
-        connection_type != node_argument(source_node, "item_type") or from_port != "item-out"
-    ):
-        raise WorkflowValidationError(
-            f"foreach output requires {node_argument(source_node, 'item_type')} data: connection {connection_index}"
-        )
-    if target_type == "llm" and connection_type != "list-message":
-        raise WorkflowValidationError(
-            f"llm messages-in input requires list-message data: connection {connection_index}"
-        )
-    if source_type == "llm" and from_port == "tool_calls" and connection_type != "list-content":
-        raise WorkflowValidationError(
-            f"llm tool_calls output requires list-content data: connection {connection_index}"
-        )
+    if error is not None:
+        raise WorkflowValidationError(f"{error}: connection {connection_index}")
