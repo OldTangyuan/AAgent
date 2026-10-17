@@ -592,15 +592,14 @@ class CallableWorkflowNodeTest(unittest.TestCase):
             [{"id": "workflow:result", "name": "result", "type": "content"}],
         )
 
-    def test_validator_filters_wrong_callable_workflow_port_type(self):
+    def test_validator_rejects_wrong_callable_workflow_port_type(self):
         workflow = callable_workflow_fixture()
         workflow["connections"][2]["type"] = "message"
 
-        validate_workflow(workflow)
-        parsed = parse_workflow(workflow)
-        self.assertEqual(
-            parsed[1]["data_inputs"]["workflow:query"], [None, None, None]
-        )
+        with self.assertRaisesRegex(
+            WorkflowValidationError, "workflow input port workflow:query requires content data"
+        ):
+            validate_workflow(workflow)
 
     def test_parser_filters_connection_invalidated_by_metadata(self):
         workflow = callable_workflow_fixture()
@@ -613,25 +612,22 @@ class CallableWorkflowNodeTest(unittest.TestCase):
             "type": "content",
         })
 
-        parsed = parse_workflow(workflow)
-
-        self.assertEqual(parsed[0]["data_outputs"]["workflow:query"], [[1, "workflow:query"]])
-        self.assertNotIn("workflow:stale", parsed[0]["data_outputs"])
-        self.assertNotIn("workflow:stale", parsed[1]["data_inputs"])
+        with self.assertRaisesRegex(WorkflowValidationError, "unknown data port"):
+            validate_workflow(workflow)
 
     def test_validator_filters_unknown_callable_output_input(self):
         workflow = callable_workflow_fixture()
         workflow["connections"][3]["toPortId"] = "content-in"
 
-        validate_workflow(workflow)
-        self.assertEqual(parse_workflow(workflow)[1]["data_inputs"]["workflow:query"], [0, "workflow:query", None])
+        with self.assertRaisesRegex(WorkflowValidationError, "unknown data port"):
+            validate_workflow(workflow)
 
     def test_validator_filters_legacy_input_content_output(self):
         workflow = callable_workflow_fixture()
         workflow["connections"][2]["fromPortId"] = "content-out"
 
-        validate_workflow(workflow)
-        self.assertEqual(parse_workflow(workflow)[0]["data_outputs"]["workflow:query"], [])
+        with self.assertRaisesRegex(WorkflowValidationError, "unknown data port"):
+            validate_workflow(workflow)
 
     def test_validator_rejects_boundary_without_workflow_ports(self):
         workflow = callable_workflow_fixture()

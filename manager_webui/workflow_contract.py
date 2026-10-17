@@ -328,6 +328,8 @@ def is_valid_connection(
                 return False
         source_type = source_node["type"]
         target_type = target_node["type"]
+        if target_type == "llm" and connection_type != "list-message":
+            return False
         if target_type == "construct_message" and connection_type != "content":
             return False
         if source_type == "construct_message" and connection_type != "message":
@@ -353,6 +355,17 @@ def is_valid_connection(
         return not (source_type == "llm" and from_port == "tool_calls" and connection_type != "list-content")
     except (KeyError, StopIteration, TypeError):
         return False
+
+
+def connection_validation_error(
+    connection: Any,
+    nodes_by_id: dict[str, dict[str, Any]],
+    input_ports: list[dict[str, Any]],
+    output_ports: list[dict[str, Any]],
+) -> str | None:
+    if not is_valid_connection(connection, nodes_by_id, input_ports, output_ports):
+        return "connection does not match the node contract"
+    return None
 
 
 def filter_connections(
