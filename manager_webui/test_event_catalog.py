@@ -19,6 +19,10 @@ class EventCatalogTest(unittest.TestCase):
         )
 
         self.assertEqual(items["workflow"]["schema"]["properties"]["payload"]["required"], ["workflow_name"])
+        for event_type in ("qq", "terminal", "workflow", "error", "response"):
+            schema = items[event_type]["schema"]
+            self.assertIn("version", schema["required"])
+            self.assertEqual(schema["properties"]["version"], {"const": "1.1"})
         self.assertEqual(
             items["error"]["schema"]["properties"]["payload"]["required"], ["message"]
         )
@@ -35,6 +39,8 @@ class EventCatalogTest(unittest.TestCase):
                 self.assertIn("event_type", schema["required"])
                 self.assertIn("payload", schema["required"])
                 self.assertEqual(schema["properties"]["payload"]["type"], "object")
+                if item["scope"] == "main_queue":
+                    self.assertIn("version", schema["required"])
 
 
 if __name__ == "__main__":

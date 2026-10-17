@@ -6,7 +6,7 @@
 > 适用版本:平台 `4.0.0+`。
 > 协议版本:event 1.1。
 
-本文定义 AAgent 的 Event 数据契约。版本值以仓库根 `version.json.protocol.event` 为准；传输流程与配置见[Event 协议与流转](../20-Event协议与流转.md)。本文的“必须”约束生产者应发送的格式，不表示消费端已全面校验：当前 Redis 消费边界只解析 JSON，结构错误可能在处理时失败。
+本文定义 AAgent 的 Event 数据契约。协议版本值以仓库根 `version.json.protocol.event` 为准；每条 Event 还必须在顶层携带固定的 `version: "1.1"`，Agent 主队列消费者严格校验该值。
 
 ## 1. 范围与编码
 
@@ -14,6 +14,7 @@ Event 在 Redis List 中占一个元素，内容是 UTF-8 编码的 JSON 对象�
 
 ```json
 {
+  "version": "1.1",
   "event_type": "terminal",
   "payload": {"content": "执行任务", "files": []}
 }
@@ -21,11 +22,12 @@ Event 在 Redis List 中占一个元素，内容是 UTF-8 编码的 JSON 对象�
 
 | 顶层字段 | 要求 | 类型 | 含义 |
 |---|---|---|---|
+| `version` | 必须 | 固定字符串 `1.1` | 单条 Event 的协议版本；Agent 主队列消费者拒绝缺失或不匹配的版本 |
 | `event_type` | 必须 | 非空字符串 | 选择 Workflow 执行或事件绑定 |
 | `payload` | 必须 | JSON 对象 | 类型专属数据；绑定路由将其浅拷贝并覆盖 `workflow_name` |
 | `time` | 可选 | 字符串 | 终端生产者附加的时间；主 worker 不读取 |
 
-其他顶层字段可随 Event 透传并保存到历史，但没有统一处理语义。`created_at` 和 `_id` 由历史存储生成，不属于队列 Event：worker 出队后先把 Event 复制并加 UTC `created_at` 写入 MongoDB，数据库生成 `_id`。没有逐条消息的 `schema_version`：该字段及消费边界版本校验尚未实施，不能从单条队列消息判断其协议版本。WebUI 展示不可解析的队列内容时包装出的 `raw` 不是可发送的协议类型。
+其他顶层字段可随 Event 透传并保存到历史，但没有统一处理语义。`created_at` 和 `_id` 由历史存储生成，不属于队列 Event：worker 校验版本后把 Event 复制并加 UTC `created_at` 写入 MongoDB，数据库生成 `_id`。WebUI 展示不可解析的队列内容时包装出的 `raw` 不是可发送的协议类型。Tool Server 专用回调队列不由主 worker 消费，不在本次主队列版本校验范围内。
 
 ## 2. 类型契约
 
@@ -35,6 +37,7 @@ Event 在 Redis List 中占一个元素，内容是 UTF-8 编码的 JSON 对象�
 
 ```json
 {
+  "version": "1.1",
   "event_type": "qq",
   "payload": {
     "post_type": "message",
@@ -52,6 +55,7 @@ QQ listener 也产生 `post_type: "inputing"`、带 `user_id` 的输入状态事
 
 ```json
 {
+  "version": "1.1",
   "event_type": "terminal",
   "time": "2026-09-18T12:00:00.000Z",
   "payload": {"content": "执行任务", "files": []}
@@ -66,6 +70,7 @@ WebUI 要求去除首尾空白后的 `content` 非空且最多 4000 个字符，
 
 ```json
 {
+  "version": "1.1",
   "event_type": "workflow",
   "payload": {"content": "执行任务", "files": [], "workflow_name": "answer_question"}
 }
@@ -76,13 +81,13 @@ WebUI 要求去除首尾空白后的 `content` 非空且最多 4000 个字符，
 执行成功产生 `response`：
 
 ```json
-{"event_type": "response", "payload": {"content": "Workflow 输出"}}
+{"version": "1.1", "event_type": "response", "payload": {"content": "Workflow 输出"}}
 ```
 
 `content` 是 Workflow 最终输出的 `content` 字段（若没有则为整个输出），值不限定为字符串。目标 Workflow 不存在或处理时抛出异常产生 `error`：
 
 ```json
-{"event_type": "error", "payload": {"workflow_name": "answer_question", "message": "workflow not found"}}
+{"version": "1.1", "event_type": "error", "payload": {"workflow_name": "answer_question", "message": "workflow not found"}}
 ```
 
 `message` 是错误文本；若原 Event 的 payload 没有 `workflow_name`，异常捕获产生的 `error` 也不带该字段。当前 worker 对所有非 `workflow` 类型（包括 `response` 和 `error`）都查询绑定：为它们配置绑定会再次触发 Workflow，需避免循环。远景设计目标是“无终态”：让 Agent 自主判断是否继续处理并形成循环，同时权衡循环带来的成本与效果；这并非让这两种事件退出绑定路由，也不意味着当前已具备自主控制循环的机制。该目标不属于 Event 1.1 的已实现行为。
@@ -110,7 +115,7 @@ WebUI 要求去除首尾空白后的 `content` 非空且最多 4000 个字符，
 
 ## 3. 传输与处理语义
 
-QQ 队列用 `LPUSH` / `BLPOP`，后入先出；主队列常规 Event 用 `LPUSH` / `BRPOP`，先入先出；WebUI 终端用 `RPUSH`，会先于已排队的常规 Event 出队。主 worker 出队后先写历史，再处理 Event；无启用绑定的非 `workflow` Event 仅留在历史。绑定查询出错会报告失败，不当作未绑定。当前队列不提供确认、自动重试或去重协议。
+QQ 队列用 `LPUSH` / `BLPOP`，后入先出；主队列常规 Event 用 `LPUSH` / `BRPOP`，先入先出；WebUI 终端用 `RPUSH`，会先于已排队的常规 Event 出队。所有投递至主队列的生产者必须携带顶层 `version: "1.1"`。主 worker 出队后先校验该值必须精确匹配 `1.1`，再写历史和处理 Event；缺失或不匹配时拒绝处理且不写入历史。无启用绑定的非 `workflow` Event 仅留在历史。绑定查询出错会报告失败，不当作未绑定。当前队列不提供确认、自动重试或去重协议。
 
 Event 1.1 相较 Event 1.0 将 Workflow 选择字段从 MongoDB ID `workflow_id` 改为唯一名称 `workflow_name`。事件绑定记录和 `workflow` Event 均使用 `workflow_name`；MongoDB `_id` 仅供管理 API 定位 Workflow 文档，不属于 Event 执行选择契约。本版本不保留旧字段兼容分支。
 

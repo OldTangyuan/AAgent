@@ -17,6 +17,7 @@ AGENT_TOOLS_KEY = os.getenv(
     "AGENT_TOOLS_KEY",
     "aagent:tools",
 )
+EVENT_VERSION = "1.1"
 
 
 def get_connection():
@@ -30,7 +31,8 @@ def get_connection():
 
 def publish_to_queue(queue_name: str, message: dict):
     client = get_connection()
-    client.lpush(queue_name, json.dumps(message, ensure_ascii=False))
+    event = {**message, "version": EVENT_VERSION}
+    client.lpush(queue_name, json.dumps(event, ensure_ascii=False))
     return True
 
 def insert_to_queue(queue_name: str, *messages: dict):

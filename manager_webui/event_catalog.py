@@ -14,8 +14,9 @@ EVENT_CATALOG = [
         "schema": {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "type": "object",
-            "required": ["event_type", "payload"],
+            "required": ["version", "event_type", "payload"],
             "properties": {
+                "version": {"const": "1.1"},
                 "event_type": {"const": "qq"},
                 "payload": {
                     "type": "object",
@@ -43,8 +44,9 @@ EVENT_CATALOG = [
         "schema": {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "type": "object",
-            "required": ["event_type", "payload"],
+            "required": ["version", "event_type", "payload"],
             "properties": {
+                "version": {"const": "1.1"},
                 "event_type": {"const": "terminal"},
                 "time": {"type": "string", "format": "date-time"},
                 "payload": {
@@ -70,8 +72,9 @@ EVENT_CATALOG = [
         "schema": {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "type": "object",
-            "required": ["event_type", "payload"],
+            "required": ["version", "event_type", "payload"],
             "properties": {
+                "version": {"const": "1.1"},
                 "event_type": {"const": "workflow"},
                 "payload": {
                     "type": "object",
@@ -97,8 +100,9 @@ EVENT_CATALOG = [
         "schema": {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "type": "object",
-            "required": ["event_type", "payload"],
+            "required": ["version", "event_type", "payload"],
             "properties": {
+                "version": {"const": "1.1"},
                 "event_type": {"const": "error"},
                 "payload": {
                     "type": "object",
@@ -123,8 +127,9 @@ EVENT_CATALOG = [
         "schema": {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "type": "object",
-            "required": ["event_type", "payload"],
+            "required": ["version", "event_type", "payload"],
             "properties": {
+                "version": {"const": "1.1"},
                 "event_type": {"const": "response"},
                 "payload": {
                     "type": "object",

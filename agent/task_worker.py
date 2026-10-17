@@ -17,6 +17,16 @@ from queue_client import (
     set_worker_status,
 )
 
+EVENT_VERSION = "1.1"
+
+
+def validate_event_version(event: dict) -> None:
+    version = event.get("version")
+    if version != EVENT_VERSION:
+        raise ValueError(
+            f"unsupported event version: {version!r}; expected {EVENT_VERSION}"
+        )
+
 
 def read_bound_workflow_name(event_type: str) -> str | None:
     mongo_kwargs = {
@@ -41,6 +51,7 @@ def read_bound_workflow_name(event_type: str) -> str | None:
     return binding["workflow_name"] if binding is not None else None
 
 def handle_task(e: dict):
+    validate_event_version(e)
     record_history(e)
     event_type = e["event_type"]
     if event_type != "workflow":

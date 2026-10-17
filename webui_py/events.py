@@ -385,6 +385,7 @@ def create_events_router(
             return JSONResponse(status_code=400, content={"error": "暂不支持文件附件"})
 
         event = {
+            "version": "1.1",
             "event_type": "terminal",
             "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "payload": {"content": content, "files": []},
